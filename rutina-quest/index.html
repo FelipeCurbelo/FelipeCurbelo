@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#6c5ce7" />
+  <meta name="description" content="Rutina Quest: convierte tus tareas en hábitos, gana recompensas y haz crecer tu mascota." />
+  <title>Rutina Quest 🌱</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌱%3C/text%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ======================= PANTALLA DE BIENVENIDA ======================= -->
+  <section id="onboarding" class="screen onboarding">
+    <div class="onboarding-card">
+      <div class="onboarding-mascot" aria-hidden="true">🌱</div>
+      <h1>Rutina Quest</h1>
+      <p class="tagline">Convierte tus tareas en hábitos, una recompensa a la vez.</p>
+      <label class="field">
+        <span>¿Cómo te llamas?</span>
+        <input id="playerNameInput" type="text" maxlength="18" placeholder="Tu nombre o apodo" autocomplete="off" />
+      </label>
+      <p class="onboarding-hint">Elige tu compañero. Crecerá contigo cada vez que cumplas una tarea.</p>
+      <div id="companionPicker" class="companion-picker" role="radiogroup" aria-label="Elige tu compañero"></div>
+      <button id="startBtn" class="btn btn-primary btn-lg">Empezar mi aventura</button>
+    </div>
+  </section>
+
+  <!-- ======================= APP PRINCIPAL ======================= -->
+  <main id="app" class="app hidden">
+    <!-- Cabecera con estado del jugador -->
+    <header class="topbar">
+      <div class="player">
+        <div class="player-avatar" id="playerAvatar">🌱</div>
+        <div class="player-meta">
+          <div class="player-name" id="playerName">Jugador</div>
+          <div class="level-row">
+            <span class="level-badge" id="levelBadge">Nv. 1</span>
+            <div class="xp-bar" title="Experiencia">
+              <div class="xp-fill" id="xpFill"></div>
+              <span class="xp-text" id="xpText">0/100 XP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="wallet">
+        <button class="icon-btn" id="settingsBtn" title="Ajustes" aria-label="Ajustes">⚙️</button>
+        <div class="coins" title="Monedas"><span class="coin-icon">🪙</span><span id="coinCount">0</span></div>
+      </div>
+    </header>
+
+    <!-- Zona de la mascota + progreso del día -->
+    <section class="hero">
+      <div class="hero-glow"></div>
+      <div class="progress-ring-wrap">
+        <svg class="progress-ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+          <circle class="ring-fill" id="ringFill" cx="60" cy="60" r="52"></circle>
+        </svg>
+        <div class="hero-mascot" id="heroMascot">🌱</div>
+      </div>
+      <div class="hero-text">
+        <div class="hero-percent" id="heroPercent">0%</div>
+        <div class="hero-caption" id="heroCaption">del día completado</div>
+        <div class="hero-mood" id="heroMood">Tu compañero está esperando… ¡empieza con una tarea fácil!</div>
+      </div>
+    </section>
+
+    <!-- Filtros por categoría -->
+    <nav class="filters" id="filters">
+      <button class="chip active" data-filter="all">✨ Todas</button>
+      <button class="chip" data-filter="personal">🧍 Personales</button>
+      <button class="chip" data-filter="hogar">🏠 Hogar</button>
+      <button class="chip" data-filter="trabajo">💼 Trabajo</button>
+    </nav>
+
+    <!-- Lista de tareas del día -->
+    <section class="tasks" id="taskList" aria-live="polite"></section>
+
+    <!-- Vista de logros (oculta por defecto) -->
+    <section class="panel hidden" id="achievementsPanel">
+      <h2 class="panel-title">🏆 Logros</h2>
+      <div class="achievements-grid" id="achievementsGrid"></div>
+    </section>
+
+    <!-- Vista de tienda (oculta por defecto) -->
+    <section class="panel hidden" id="shopPanel">
+      <h2 class="panel-title">🛍️ Tienda</h2>
+      <p class="panel-sub">Gasta tus monedas en temas para personalizar tu juego.</p>
+      <div class="shop-grid" id="shopGrid"></div>
+    </section>
+
+    <!-- Vista de estadísticas (oculta por defecto) -->
+    <section class="panel hidden" id="statsPanel">
+      <h2 class="panel-title">📊 Progreso</h2>
+      <div class="stats-grid" id="statsGrid"></div>
+      <h3 class="panel-subtitle">Tus hábitos en formación</h3>
+      <div class="habits-list" id="habitsList"></div>
+    </section>
+
+    <!-- Barra de navegación inferior -->
+    <nav class="tabbar">
+      <button class="tab active" data-view="home">🏡<span>Hoy</span></button>
+      <button class="tab" data-view="stats">📊<span>Progreso</span></button>
+      <button class="tab tab-add" id="addTaskFab" aria-label="Añadir tarea">＋</button>
+      <button class="tab" data-view="shop">🛍️<span>Tienda</span></button>
+      <button class="tab" data-view="achievements">🏆<span>Logros</span></button>
+    </nav>
+  </main>
+
+  <!-- ======================= MODAL: AÑADIR / EDITAR TAREA ======================= -->
+  <div class="modal-overlay hidden" id="taskModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="taskModalTitle">Nueva tarea</h2>
+        <button class="icon-btn" id="closeTaskModal" aria-label="Cerrar">✕</button>
+      </div>
+      <label class="field">
+        <span>Nombre de la tarea</span>
+        <input id="taskNameInput" type="text" maxlength="40" placeholder="Ej: Tender la cama" autocomplete="off" />
+      </label>
+
+      <div class="field">
+        <span>Categoría</span>
+        <div class="cat-select" id="catSelect">
+          <button type="button" class="cat-opt active" data-cat="personal">🧍 Personal</button>
+          <button type="button" class="cat-opt" data-cat="hogar">🏠 Hogar</button>
+          <button type="button" class="cat-opt" data-cat="trabajo">💼 Trabajo</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span>Icono</span>
+        <div class="emoji-grid" id="emojiGrid"></div>
+      </div>
+
+      <div class="field">
+        <span>Ideas rápidas <em>(toca para añadir)</em></span>
+        <div class="suggestions" id="suggestions"></div>
+      </div>
+
+      <button id="saveTaskBtn" class="btn btn-primary btn-lg">Guardar tarea</button>
+      <button id="deleteTaskBtn" class="btn btn-ghost hidden">🗑️ Eliminar tarea</button>
+    </div>
+  </div>
+
+  <!-- ======================= MODAL: AJUSTES ======================= -->
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Ajustes</h2>
+        <button class="icon-btn" id="closeSettingsModal" aria-label="Cerrar">✕</button>
+      </div>
+      <label class="field">
+        <span>Tu nombre</span>
+        <input id="settingsNameInput" type="text" maxlength="18" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Meta para formar un hábito (días seguidos)</span>
+        <input id="habitGoalInput" type="number" min="3" max="90" />
+      </label>
+      <label class="toggle-field">
+        <span>🔔 Vibrar al completar tareas</span>
+        <input id="hapticsToggle" type="checkbox" />
+      </label>
+      <button id="saveSettingsBtn" class="btn btn-primary btn-lg">Guardar</button>
+      <button id="resetBtn" class="btn btn-ghost">Reiniciar todo el progreso</button>
+      <p class="settings-credit">Rutina Quest · tu progreso se guarda en este dispositivo.</p>
+    </div>
+  </div>
+
+  <!-- ======================= POPUP DE RECOMPENSA ======================= -->
+  <div class="reward-overlay hidden" id="rewardPopup">
+    <div class="reward-card">
+      <div class="reward-emoji" id="rewardEmoji">🎉</div>
+      <div class="reward-title" id="rewardTitle">¡Tarea completada!</div>
+      <div class="reward-gains" id="rewardGains"></div>
+      <div class="reward-streak" id="rewardStreak"></div>
+    </div>
+  </div>
+
+  <!-- Toast para logros / hábitos formados -->
+  <div class="toast hidden" id="toast"></div>
+
+  <!-- Capa de confeti -->
+  <canvas id="confetti" class="confetti"></canvas>
+
+  <script src="app.js"></script>
+</body>
+</html>
