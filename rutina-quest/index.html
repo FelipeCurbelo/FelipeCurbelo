@@ -46,6 +46,7 @@
         </div>
       </div>
       <div class="wallet">
+        <button class="icon-btn alert-btn" id="alertsBtn" title="Avisos" aria-label="Avisos">🔔<span class="alert-badge hidden" id="alertBadge">0</span></button>
         <button class="icon-btn" id="shopBtn" title="Tienda" aria-label="Tienda">🛍️</button>
         <button class="icon-btn" id="settingsBtn" title="Ajustes" aria-label="Ajustes">⚙️</button>
         <div class="coins" title="Monedas"><span class="coin-icon">🪙</span><span id="coinCount">0</span></div>
@@ -205,6 +206,30 @@
       <button id="saveSettingsBtn" class="btn btn-primary btn-lg">Guardar</button>
       <button id="resetBtn" class="btn btn-ghost">Reiniciar todo el progreso</button>
       <p class="settings-credit">Rutina Quest · tu progreso se guarda en este dispositivo.</p>
+    </div>
+  </div>
+
+  <!-- ======================= MODAL: AVISOS ======================= -->
+  <div class="modal-overlay hidden" id="alertsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>🔔 Avisos</h2>
+        <button class="icon-btn" id="closeAlertsModal" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="alerts-list" id="alertsList"></div>
+      <div class="notif-settings">
+        <h3 class="panel-subtitle" style="margin-top:6px">Notificaciones</h3>
+        <label class="toggle-field">
+          <span>📲 Avisos del sistema</span>
+          <input id="alertsSysToggle" type="checkbox" />
+        </label>
+        <label class="field">
+          <span>Avisarme con antelación (días)</span>
+          <input id="notifyDaysInput" type="number" min="0" max="30" />
+        </label>
+        <button id="testNotifBtn" class="btn btn-ghost">Probar un aviso</button>
+        <p class="type-hint" id="alertsPermHint"></p>
+      </div>
     </div>
   </div>
 

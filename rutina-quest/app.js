@@ -115,7 +115,7 @@
       unlockedThemes: ["default"],
       activeTheme: "default",
       achievements: [],
-      settings: { habitGoal: 21, haptics: true },
+      settings: { habitGoal: 21, haptics: true, notify: false, notifyDays: 3 },
       stats: { totalDone: 0, totalCoins: 0, perfectDays: 0, deadlinesDone: 0 },
       lastOpen: todayStr(),
     };
@@ -128,6 +128,7 @@
         state = Object.assign(defaultState(), JSON.parse(raw));
         // Migración: valores nuevos que pueden faltar en partidas anteriores.
         state.stats = Object.assign({ totalDone: 0, totalCoins: 0, perfectDays: 0, deadlinesDone: 0 }, state.stats);
+        state.settings = Object.assign({ habitGoal: 21, haptics: true, notify: false, notifyDays: 3 }, state.settings);
         state.tasks.forEach((t) => { if (!t.type) t.type = "daily"; });
       }
     } catch (e) { /* ignora datos corruptos */ }
@@ -340,6 +341,7 @@
     $("#heroMood").textContent = moodText(pct, total, done);
 
     renderReminders();
+    renderAlertBadge(false);
     renderTasks();
     save();
   }
@@ -656,6 +658,126 @@
   function closeProgressModal() { $("#progressModal").classList.add("hidden"); progressTaskId = null; }
 
   /* ----------------------------------------------------------
+     AVISOS / NOTIFICACIONES
+     Los avisos internos (campanita) siempre funcionan. Las
+     notificaciones del sistema se muestran al abrir el juego.
+     ---------------------------------------------------------- */
+  function computeAlerts() {
+    const nd = state.settings.notifyDays != null ? state.settings.notifyDays : 3;
+    const alerts = [];
+    deadlineTasks().forEach((t) => {
+      if ((t.progress || 0) >= 100) return;
+      const d = daysUntil(t.due);
+      let kind = null;
+      if (d < 0) kind = "over";
+      else if (d === 0) kind = "today";
+      else if (d <= nd) kind = "soon";
+      if (kind) alerts.push({ kind, t, d });
+    });
+    alerts.sort((a, b) => a.d - b.d); // vencidas y más cercanas primero
+    return alerts;
+  }
+
+  function renderAlertBadge(animate) {
+    const alerts = computeAlerts();
+    const badge = $("#alertBadge");
+    const btn = $("#alertsBtn");
+    if (!alerts.length) { badge.classList.add("hidden"); return; }
+    badge.classList.remove("hidden");
+    badge.textContent = alerts.length;
+    const urgent = alerts.some((a) => a.kind === "over" || a.kind === "today");
+    badge.style.background = urgent ? "#ff5a6a" : "#ffb020";
+    if (animate) {
+      btn.classList.remove("ringing");
+      void btn.offsetWidth;    // reinicia la animación
+      btn.classList.add("ringing");
+    }
+  }
+
+  function alertLabel(a) {
+    if (a.kind === "over") return `⚠️ Venció hace ${Math.abs(a.d)} día${Math.abs(a.d) === 1 ? "" : "s"}`;
+    if (a.kind === "today") return "⏰ ¡Vence hoy!";
+    if (a.d === 1) return "🔔 Vence mañana";
+    return `🔔 Faltan ${a.d} días`;
+  }
+
+  function openAlerts() {
+    const list = $("#alertsList");
+    const alerts = computeAlerts();
+    if (!alerts.length) {
+      list.innerHTML = `<div class="alerts-empty"><div class="big">✅</div>
+        <p>Sin avisos pendientes.<br>Estás al día con tus entregas.</p></div>`;
+    } else {
+      list.innerHTML = alerts.map((a) => {
+        const col = urgencyColor(a.d, false);
+        return `<div class="alert-item" data-goagenda="1" style="--urg:${col}">
+          <span class="alert-emoji">${a.t.icon}</span>
+          <div class="alert-body">
+            <div class="alert-name">${escapeHTML(a.t.name)}</div>
+            <div class="alert-when">${alertLabel(a)} · ${a.t.progress || 0}% hecho</div>
+          </div>
+        </div>`;
+      }).join("");
+      $$("#alertsList .alert-item").forEach((el) => el.addEventListener("click", () => {
+        $("#alertsModal").classList.add("hidden");
+        switchView("agenda");
+      }));
+    }
+
+    // Ajustes de notificación
+    const supported = ("Notification" in window);
+    const perm = supported ? Notification.permission : "unsupported";
+    $("#alertsSysToggle").checked = !!state.settings.notify && perm === "granted";
+    $("#notifyDaysInput").value = state.settings.notifyDays != null ? state.settings.notifyDays : 3;
+    $("#alertsPermHint").textContent = notifHint(perm);
+
+    $("#alertsModal").classList.remove("hidden");
+  }
+
+  function notifHint(perm) {
+    if (perm === "unsupported") return "Tu navegador no admite notificaciones del sistema. Los avisos internos (🔔) sí funcionan.";
+    if (perm === "denied") return "Bloqueaste las notificaciones. Actívalas desde los ajustes del navegador para este sitio.";
+    if (perm === "granted" && state.settings.notify) return "Listo. Te avisaremos al abrir el juego cuando una entrega esté por vencer.";
+    return "Actívalas para recibir un aviso del sistema cuando una entrega esté cerca. Aparecen al abrir el juego.";
+  }
+
+  async function requestNotifyPermission() {
+    if (!("Notification" in window)) { toast("Tu navegador no admite notificaciones."); return false; }
+    let perm = Notification.permission;
+    if (perm === "default") {
+      try { perm = await Notification.requestPermission(); } catch (e) { perm = Notification.permission; }
+    }
+    return perm === "granted";
+  }
+
+  function showSystemNotification(title, body) {
+    const opts = { body, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag: "rq-deadlines", renotify: true };
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready
+          .then((reg) => reg.showNotification(title, opts))
+          .catch(() => { try { new Notification(title, opts); } catch (e) {} });
+      } else {
+        new Notification(title, opts);
+      }
+    } catch (e) { /* silencioso */ }
+  }
+
+  // Al abrir el juego: notifica (una vez al día por tarea) lo que está por vencer.
+  function notifyDeadlines() {
+    if (!state.settings.notify) return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const today = todayStr();
+    const due = computeAlerts().filter((a) => a.t.lastNotified !== today);
+    if (!due.length) return;
+    due.forEach((a) => { a.t.lastNotified = today; });
+    save();
+    const title = due.length === 1 ? "⏰ Rutina Quest" : `⏰ Tienes ${due.length} entregas por vencer`;
+    const body = due.slice(0, 4).map((a) => `${a.t.icon} ${a.t.name} — ${dueText(a.d, false)}`).join("\n");
+    showSystemNotification(title, body);
+  }
+
+  /* ----------------------------------------------------------
      Navegación entre vistas
      ---------------------------------------------------------- */
   const VIEWS = {
@@ -931,6 +1053,8 @@
     applyTheme();
     render();
     switchView("home");
+    // Avisos: animar la campana y notificar al abrir (si está activado).
+    setTimeout(() => { renderAlertBadge(true); notifyDeadlines(); }, 800);
   }
 
   function wireEvents() {
@@ -948,6 +1072,36 @@
 
     // Tienda (ahora accesible desde el botón del encabezado)
     $("#shopBtn").addEventListener("click", () => switchView("shop"));
+
+    // Avisos
+    $("#alertsBtn").addEventListener("click", openAlerts);
+    $("#closeAlertsModal").addEventListener("click", () => $("#alertsModal").classList.add("hidden"));
+    $("#alertsModal").addEventListener("click", (e) => { if (e.target.id === "alertsModal") $("#alertsModal").classList.add("hidden"); });
+    $("#alertsSysToggle").addEventListener("change", async (e) => {
+      if (e.target.checked) {
+        const ok = await requestNotifyPermission();
+        state.settings.notify = ok;
+        e.target.checked = ok;
+        if (ok) { save(); notifyDeadlines(); }
+        else toast("No se activaron los avisos del sistema.");
+      } else {
+        state.settings.notify = false; save();
+      }
+      const perm = ("Notification" in window) ? Notification.permission : "unsupported";
+      $("#alertsPermHint").textContent = notifHint(perm);
+    });
+    $("#notifyDaysInput").addEventListener("change", (e) => {
+      let n = parseInt(e.target.value, 10);
+      if (isNaN(n)) n = 3;
+      state.settings.notifyDays = Math.max(0, Math.min(30, n));
+      e.target.value = state.settings.notifyDays;
+      save(); renderAlertBadge(false); openAlerts();
+    });
+    $("#testNotifBtn").addEventListener("click", async () => {
+      const ok = await requestNotifyPermission();
+      if (ok) showSystemNotification("🔔 Rutina Quest", "¡Así se verán tus avisos de entregas!");
+      else toast("Activa primero los avisos del sistema.");
+    });
 
     // Modal tareas
     $("#closeTaskModal").addEventListener("click", closeTaskModal);

@@ -43,6 +43,13 @@ cuenta, servidor ni instalación de tiendas de apps.
 - **Agenda con calendario** 📅 para tareas con fecha de entrega: cuenta regresiva
   ("faltan 20 días"), recordatorios de lo que vence pronto y avance parcial con
   recompensas — perfecto para no dejar todo para el último día.
+- **Avisos** 🔔 de entregas próximas o vencidas:
+  - *Dentro del juego:* una campana con contador y lista de lo que está por
+    vencer (siempre disponible, sin permisos).
+  - *Del sistema:* notificaciones del dispositivo (opcionales) que aparecen al
+    abrir el juego, con los días de antelación que elijas. En iPhone requieren
+    tener la app añadida a la pantalla de inicio. *(Nota: al ser un juego sin
+    servidor, los avisos se muestran al abrir la app, no en segundo plano.)*
 - **Tu compañero crece contigo:** la mascota-planta evoluciona (🌱→🌿→🪴→🌳→🌸)
   a medida que subes de nivel.
 - **Progreso del día:** anillo circular con el porcentaje de tareas completadas y
