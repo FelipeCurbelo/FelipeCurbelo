@@ -24,12 +24,25 @@ cuenta, servidor ni instalación de tiendas de apps.
 4. Repite la tarea día tras día para subir tu **racha** 🔥. Al llegar a la meta
    (21 días por defecto), la tarea se convierte en un **hábito** 🌟.
 
+### Dos tipos de tareas
+
+- 🔁 **Hábito diario** — se repite solo cada día (no hay que volver a añadirlo) y
+  construye racha para formar un hábito. Ideal para levantarse temprano, lavar
+  los platos, beber agua…
+- 📅 **Con fecha límite** — para entregas puntuales ("terminar el reporte en 20
+  días"). La tarea **persiste día tras día** hasta su fecha y la encuentras en la
+  pestaña **Agenda**, con calendario, cuenta regresiva y una barra de **avance**
+  que subes poco a poco (+10 %, +25 %, +50 %), ganando recompensas en cada paso.
+
 ## ✨ Mecánicas de motivación
 
 - **Recompensa inmediata:** monedas, experiencia y celebración en cada tarea, para
   vencer la procrastinación con gratificación instantánea.
 - **Rachas y hábitos:** barra de progreso por tarea que muestra cuánto falta para
   formar el hábito. Bonus de monedas creciente por mantener la racha.
+- **Agenda con calendario** 📅 para tareas con fecha de entrega: cuenta regresiva
+  ("faltan 20 días"), recordatorios de lo que vence pronto y avance parcial con
+  recompensas — perfecto para no dejar todo para el último día.
 - **Tu compañero crece contigo:** la mascota-planta evoluciona (🌱→🌿→🪴→🌳→🌸)
   a medida que subes de nivel.
 - **Progreso del día:** anillo circular con el porcentaje de tareas completadas y

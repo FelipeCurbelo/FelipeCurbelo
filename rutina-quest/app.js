@@ -81,6 +81,8 @@
     { id: "perfect",   icon: "✨", name: "Día redondo",        desc: "Completa todas tus tareas en un día",  test: (s) => s.stats.perfectDays >= 1 },
     { id: "done50",    icon: "💪", name: "Imparable",          desc: "Completa 50 tareas en total",          test: (s) => s.stats.totalDone >= 50 },
     { id: "allcats",   icon: "🌈", name: "Equilibrio",         desc: "Ten tareas en las 3 categorías",       test: (s) => new Set(s.tasks.map((t) => t.cat)).size >= 3 },
+    { id: "deadline1", icon: "🎯", name: "Cumplidor",          desc: "Termina una tarea con fecha límite",   test: (s) => (s.stats.deadlinesDone || 0) >= 1 },
+    { id: "planner",   icon: "🗓️", name: "Organizado",         desc: "Programa 3 tareas con fecha",          test: (s) => s.tasks.filter((t) => t.type === "deadline").length >= 3 },
   ];
 
   /* ----------------------------------------------------------
@@ -89,7 +91,12 @@
   let state = null;
   let currentFilter = "all";
   let editingId = null;
-  let draft = { cat: "personal", icon: "☀️" };
+  let draft = { cat: "personal", icon: "☀️", type: "daily", due: "" };
+  let calView = null;          // { year, month } del calendario visible
+  let progressTaskId = null;   // tarea abierta en el modal de avance
+
+  // Recompensa total de una tarea con fecha (se reparte según el avance).
+  const DEADLINE_REWARD = { xp: 45, coins: 35 };
 
   function todayStr(d) {
     const x = d || new Date();
@@ -109,7 +116,7 @@
       activeTheme: "default",
       achievements: [],
       settings: { habitGoal: 21, haptics: true },
-      stats: { totalDone: 0, totalCoins: 0, perfectDays: 0 },
+      stats: { totalDone: 0, totalCoins: 0, perfectDays: 0, deadlinesDone: 0 },
       lastOpen: todayStr(),
     };
   }
@@ -117,7 +124,12 @@
   function load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) state = Object.assign(defaultState(), JSON.parse(raw));
+      if (raw) {
+        state = Object.assign(defaultState(), JSON.parse(raw));
+        // Migración: valores nuevos que pueden faltar en partidas anteriores.
+        state.stats = Object.assign({ totalDone: 0, totalCoins: 0, perfectDays: 0, deadlinesDone: 0 }, state.stats);
+        state.tasks.forEach((t) => { if (!t.type) t.type = "daily"; });
+      }
     } catch (e) { /* ignora datos corruptos */ }
     if (!state) state = null;
   }
@@ -135,6 +147,7 @@
 
     const yesterday = todayStr(new Date(Date.now() - 86400000));
     state.tasks.forEach((t) => {
+      if ((t.type || "daily") !== "daily") return; // las tareas con fecha no se reinician
       // Si la última vez completada no fue hoy ni ayer, la racha se rompe.
       if (t.lastDone && t.lastDone !== today && t.lastDone !== yesterday) {
         t.streak = 0;
@@ -198,8 +211,9 @@
     // ¿Se acaba de formar el hábito?
     const habitJustFormed = t.streak === state.settings.habitGoal;
 
-    // ¿Día perfecto?
-    const allDone = state.tasks.length > 0 && state.tasks.every((x) => x.doneToday);
+    // ¿Día perfecto? (solo cuentan los hábitos diarios)
+    const daily = state.tasks.filter((x) => (x.type || "daily") === "daily");
+    const allDone = daily.length > 0 && daily.every((x) => x.doneToday);
     if (allDone && state.stats.lastPerfect !== today) {
       state.stats.perfectDays += 1;
       state.stats.lastPerfect = today;
@@ -238,6 +252,58 @@
   }
 
   /* ----------------------------------------------------------
+     Registrar avance de una tarea con fecha límite.
+     Cada avance da recompensa proporcional; al 100% se completa.
+     ---------------------------------------------------------- */
+  function advanceDeadline(id, addPct) {
+    const t = state.tasks.find((x) => x.id === id);
+    if (!t || t.type !== "deadline") return;
+    const before = t.progress || 0;
+    if (before >= 100) return;
+    const after = Math.min(100, before + addPct);
+    const delta = after - before;
+    if (delta <= 0) return;
+
+    t.progress = after;
+    const xpGain = Math.max(1, Math.round((DEADLINE_REWARD.xp * delta) / 100));
+    const coinGain = Math.max(1, Math.round((DEADLINE_REWARD.coins * delta) / 100));
+
+    const beforeLevel = level(state.xp);
+    state.xp += xpGain;
+    state.coins += coinGain;
+    state.stats.totalCoins += coinGain;
+
+    const finished = after >= 100 && !t.completedDate;
+    if (finished) {
+      t.completedDate = todayStr();
+      state.stats.deadlinesDone = (state.stats.deadlinesDone || 0) + 1;
+      state.stats.totalDone += 1;
+    }
+    const afterLevel = level(state.xp);
+
+    save();
+    haptic();
+    render();
+    if (!$("#agendaPanel").classList.contains("hidden")) renderAgenda();
+    if (progressTaskId === id) renderProgressModal();
+
+    burstConfetti();
+    showReward({
+      xpGain, coinGain, task: t,
+      title: finished ? "¡Entrega terminada! 🎯" : "¡Buen avance! 🚀",
+      subtitle: finished ? "¡Tarea completada al 100%!" : `Progreso: ${after}%`,
+    });
+
+    if (afterLevel > beforeLevel) {
+      setTimeout(() => toast(`🎊 ¡Subiste al nivel ${afterLevel}!`), 1500);
+    }
+    if (finished) {
+      setTimeout(() => { $("#progressModal").classList.add("hidden"); progressTaskId = null; }, 1200);
+    }
+    checkAchievements();
+  }
+
+  /* ----------------------------------------------------------
      Render principal
      ---------------------------------------------------------- */
   function applyTheme() {
@@ -263,15 +329,17 @@
     $("#playerAvatar").textContent = mascot;
     $("#heroMascot").textContent = mascot;
 
-    // Progreso del día
-    const total = state.tasks.length;
-    const done = state.tasks.filter((t) => t.doneToday).length;
+    // Progreso del día (solo hábitos diarios)
+    const daily = state.tasks.filter((t) => (t.type || "daily") === "daily");
+    const total = daily.length;
+    const done = daily.filter((t) => t.doneToday).length;
     const pct = total ? Math.round((done / total) * 100) : 0;
     $("#heroPercent").textContent = pct + "%";
     const C = 2 * Math.PI * 52;
     $("#ringFill").style.strokeDashoffset = C - (C * pct) / 100;
     $("#heroMood").textContent = moodText(pct, total, done);
 
+    renderReminders();
     renderTasks();
     save();
   }
@@ -287,12 +355,14 @@
 
   function renderTasks() {
     const list = $("#taskList");
-    let tasks = state.tasks.slice();
+    // "Hoy" muestra solo los hábitos diarios; las tareas con fecha viven en Agenda.
+    let tasks = state.tasks.filter((t) => (t.type || "daily") === "daily");
+    const totalDaily = tasks.length;
     if (currentFilter !== "all") tasks = tasks.filter((t) => t.cat === currentFilter);
 
     if (tasks.length === 0) {
-      list.innerHTML = `<div class="empty"><div class="big">${state.tasks.length === 0 ? "🗒️" : "🔍"}</div>
-        <p>${state.tasks.length === 0 ? "Aún no tienes tareas.<br>Toca ＋ para crear la primera." : "No hay tareas en esta categoría."}</p></div>`;
+      list.innerHTML = `<div class="empty"><div class="big">${totalDaily === 0 ? "🗒️" : "🔍"}</div>
+        <p>${totalDaily === 0 ? "Aún no tienes hábitos diarios.<br>Toca ＋ para crear el primero." : "No hay hábitos en esta categoría."}</p></div>`;
       return;
     }
 
@@ -392,25 +462,26 @@
 
   function renderStats() {
     const s = state;
-    const habitsFormed = s.tasks.filter((t) => t.streak >= s.settings.habitGoal).length;
+    const dailyTasks = s.tasks.filter((t) => (t.type || "daily") === "daily");
+    const habitsFormed = dailyTasks.filter((t) => (t.streak || 0) >= s.settings.habitGoal).length;
     const cards = [
       { n: s.stats.totalDone, l: "Tareas completadas" },
       { n: "🔥 " + maxStreak(s), l: "Mejor racha" },
       { n: habitsFormed, l: "Hábitos formados" },
+      { n: "🎯 " + (s.stats.deadlinesDone || 0), l: "Entregas cumplidas" },
       { n: s.stats.perfectDays, l: "Días perfectos" },
       { n: "🪙 " + s.stats.totalCoins, l: "Monedas ganadas" },
-      { n: "Nv. " + level(s.xp), l: "Nivel actual" },
     ];
     $("#statsGrid").innerHTML = cards.map((c) =>
       `<div class="stat-card"><div class="stat-num">${c.n}</div><div class="stat-label">${c.l}</div></div>`
     ).join("");
 
     const list = $("#habitsList");
-    if (!s.tasks.length) {
-      list.innerHTML = `<div class="empty"><p>Crea tareas para ver aquí su progreso hacia hábito.</p></div>`;
+    if (!dailyTasks.length) {
+      list.innerHTML = `<div class="empty"><p>Crea hábitos diarios para ver aquí su progreso.</p></div>`;
       return;
     }
-    const sorted = s.tasks.slice().sort((a, b) => (b.streak || 0) - (a.streak || 0));
+    const sorted = dailyTasks.slice().sort((a, b) => (b.streak || 0) - (a.streak || 0));
     list.innerHTML = sorted.map((t) => {
       const goal = s.settings.habitGoal;
       const pct = Math.min(100, ((t.streak || 0) / goal) * 100);
@@ -427,6 +498,164 @@
   }
 
   /* ----------------------------------------------------------
+     AGENDA / tareas con fecha límite
+     ---------------------------------------------------------- */
+  const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+  function daysUntil(dateStr) {
+    return daysBetween(todayStr(), dateStr);
+  }
+  function urgencyColor(days, done) {
+    if (done) return "#26c281";
+    if (days < 0) return "#ff5a6a";       // vencida
+    if (days <= 3) return "#ff8a5b";      // urgente
+    if (days <= 10) return "#ffb020";     // pronto
+    return "#4b9fff";                     // con tiempo
+  }
+  function dueText(days, done) {
+    if (done) return "✓ Completada";
+    if (days < 0) return `Vencida hace ${Math.abs(days)} d`;
+    if (days === 0) return "¡Vence hoy!";
+    if (days === 1) return "Vence mañana";
+    return `Faltan ${days} días`;
+  }
+  function deadlineTasks() {
+    return state.tasks.filter((t) => t.type === "deadline");
+  }
+
+  // Recordatorio compacto en la pantalla Hoy (entregas de los próximos 10 días).
+  function renderReminders() {
+    const el = $("#deadlineReminder");
+    const near = deadlineTasks()
+      .filter((t) => (t.progress || 0) < 100 && daysUntil(t.due) <= 10)
+      .sort((a, b) => daysUntil(a.due) - daysUntil(b.due));
+    if (!near.length) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+    el.classList.remove("hidden");
+    el.innerHTML = near.map((t) => {
+      const d = daysUntil(t.due);
+      return `<button class="remind-chip" data-goagenda="1" style="--urg:${urgencyColor(d, false)}">
+        <span>${t.icon}</span><span>${escapeHTML(t.name)}</span>
+        <span class="rc-days">· ${dueText(d, false)}</span></button>`;
+    }).join("");
+    $$("#deadlineReminder .remind-chip").forEach((c) => c.addEventListener("click", () => switchView("agenda")));
+  }
+
+  function renderAgenda() {
+    if (!calView) { const n = new Date(); calView = { year: n.getFullYear(), month: n.getMonth() }; }
+    renderCalendar();
+    renderDeadlineList();
+  }
+
+  function renderCalendar() {
+    $("#calMonthLabel").textContent = `${MONTHS[calView.month]} ${calView.year}`;
+    const first = new Date(calView.year, calView.month, 1);
+    const startCol = (first.getDay() + 6) % 7;         // lunes = 0
+    const daysInMonth = new Date(calView.year, calView.month + 1, 0).getDate();
+    const today = todayStr();
+
+    // Mapa día -> entrega más urgente de ese día
+    const byDay = {};
+    deadlineTasks().forEach((t) => {
+      const d = new Date(t.due);
+      if (d.getFullYear() === calView.year && d.getMonth() === calView.month) {
+        const day = d.getDate();
+        const done = (t.progress || 0) >= 100;
+        const days = daysUntil(t.due);
+        if (!byDay[day] || (!done && urgencyRank(days) < urgencyRank(byDay[day].days))) {
+          byDay[day] = { days, done };
+        }
+      }
+    });
+
+    let cells = "";
+    for (let i = 0; i < startCol; i++) cells += `<div class="cal-day empty"></div>`;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const ds = `${calView.year}-${String(calView.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const info = byDay[day];
+      let cls = "cal-day";
+      if (ds === today) cls += " today";
+      let dot = "";
+      if (info) {
+        if (info.done) { cls += " due-far"; dot = `<span class="dot" style="--dotc:#26c281"></span>`; }
+        else if (info.days < 0) cls += " due-over";
+        else if (info.days <= 3) cls += " due-soon";
+        else cls += " due-far";
+        if (!info.done) dot = `<span class="dot" style="--dotc:${urgencyColor(info.days, false)}"></span>`;
+      }
+      cells += `<button class="${cls}" data-day="${ds}">${day}${dot}</button>`;
+    }
+    $("#calGrid").innerHTML = cells;
+    // Tocar un día abre el modal para programar una entrega ese día.
+    $$("#calGrid .cal-day[data-day]").forEach((c) => c.addEventListener("click", () => {
+      openTaskModal(null, { type: "deadline", due: c.dataset.day });
+    }));
+  }
+  function urgencyRank(days) { return days < 0 ? 0 : days; }
+
+  function renderDeadlineList() {
+    const list = $("#deadlineList");
+    const tasks = deadlineTasks().slice().sort((a, b) => {
+      const da = (a.progress || 0) >= 100, db = (b.progress || 0) >= 100;
+      if (da !== db) return da ? 1 : -1;                 // completadas al final
+      return daysUntil(a.due) - daysUntil(b.due);        // por cercanía
+    });
+    if (!tasks.length) {
+      list.innerHTML = `<div class="empty"><div class="big">📅</div>
+        <p>No tienes tareas con fecha.<br>Toca ＋ y elige "Con fecha límite", o toca un día del calendario.</p></div>`;
+      return;
+    }
+    list.innerHTML = tasks.map((t) => {
+      const pct = t.progress || 0;
+      const done = pct >= 100;
+      const d = daysUntil(t.due);
+      const col = urgencyColor(d, done);
+      return `<div class="deadline-card ${done ? "done" : ""}" style="--urg:${col}">
+        <div class="dc-top">
+          <span class="dc-icon">${t.icon}</span>
+          <div class="dc-body">
+            <div class="dc-name ${done ? "done" : ""}">${escapeHTML(t.name)}</div>
+            <div class="dc-due" style="color:${col}">📅 ${fmtDate(t.due)} · ${dueText(d, done)}</div>
+          </div>
+          <div class="dc-pct">${pct}%</div>
+        </div>
+        <div class="dc-bar ${done ? "done" : ""}"><i style="width:${pct}%"></i></div>
+        <button class="dc-advance ${done ? "done" : ""}" data-adv="${t.id}">
+          ${done ? "✓ Terminada — ver detalles" : "＋ Registrar avance"}
+        </button>
+      </div>`;
+    }).join("");
+    $$("#deadlineList .dc-advance").forEach((b) => b.addEventListener("click", () => openProgressModal(b.dataset.adv)));
+  }
+
+  function fmtDate(ds) {
+    const d = new Date(ds + "T00:00:00");
+    return `${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3).toLowerCase()}`;
+  }
+
+  /* ----- Modal de avance ----- */
+  function openProgressModal(id) {
+    progressTaskId = id;
+    renderProgressModal();
+    $("#progressModal").classList.remove("hidden");
+  }
+  function renderProgressModal() {
+    const t = state.tasks.find((x) => x.id === progressTaskId);
+    if (!t) return;
+    const pct = t.progress || 0;
+    const done = pct >= 100;
+    const d = daysUntil(t.due);
+    $("#progressTitle").textContent = done ? "Tarea completada 🎯" : "Registrar avance";
+    $("#progressBigName").textContent = t.name;
+    $("#progressBigDue").textContent = `${t.icon} ${fmtDate(t.due)} · ${dueText(d, done)}`;
+    $("#progressBigPct").textContent = pct + "%";
+    $("#progressBigFill").style.width = pct + "%";
+    $(".progress-big-circle").style.setProperty("--p", pct + "%");
+    $("#progressQuick").style.display = done ? "none" : "flex";
+    $("#completeDeadlineBtn").style.display = done ? "none" : "block";
+  }
+  function closeProgressModal() { $("#progressModal").classList.add("hidden"); progressTaskId = null; }
+
+  /* ----------------------------------------------------------
      Navegación entre vistas
      ---------------------------------------------------------- */
   const VIEWS = {
@@ -434,18 +663,23 @@
   };
   function switchView(view) {
     // Muestra/oculta secciones
-    const homeEls = [$(".hero"), $("#filters"), $("#taskList")];
-    const panels = { stats: $("#statsPanel"), shop: $("#shopPanel"), achievements: $("#achievementsPanel") };
+    const homeEls = [$(".hero"), $("#deadlineReminder"), $("#filters"), $("#taskList")];
+    const panels = {
+      stats: $("#statsPanel"), shop: $("#shopPanel"),
+      achievements: $("#achievementsPanel"), agenda: $("#agendaPanel"),
+    };
 
     Object.values(panels).forEach((p) => p.classList.add("hidden"));
     if (view === "home") {
       homeEls.forEach((e) => e.classList.remove("hidden"));
+      renderReminders();
     } else {
       homeEls.forEach((e) => e.classList.add("hidden"));
       panels[view].classList.remove("hidden");
       if (view === "stats") renderStats();
       if (view === "shop") renderShop();
       if (view === "achievements") renderAchievements();
+      if (view === "agenda") renderAgenda();
     }
     $$(".tab[data-view]").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -454,21 +688,27 @@
   /* ----------------------------------------------------------
      Modal de tareas
      ---------------------------------------------------------- */
-  function openTaskModal(id) {
+  function openTaskModal(id, prefill) {
     editingId = id || null;
     const modal = $("#taskModal");
     if (editingId) {
       const t = state.tasks.find((x) => x.id === id);
-      draft = { cat: t.cat, icon: t.icon };
+      draft = { cat: t.cat, icon: t.icon, type: t.type || "daily", due: t.due || "" };
       $("#taskModalTitle").textContent = "Editar tarea";
       $("#taskNameInput").value = t.name;
       $("#deleteTaskBtn").classList.remove("hidden");
     } else {
-      draft = { cat: currentFilter !== "all" ? currentFilter : "personal", icon: "☀️" };
+      draft = {
+        cat: (prefill && prefill.type === "deadline") ? "trabajo" : (currentFilter !== "all" ? currentFilter : "personal"),
+        icon: "☀️",
+        type: (prefill && prefill.type) || "daily",
+        due: (prefill && prefill.due) || "",
+      };
       $("#taskModalTitle").textContent = "Nueva tarea";
       $("#taskNameInput").value = "";
       $("#deleteTaskBtn").classList.add("hidden");
     }
+    renderTypeSelect();
     renderCatSelect();
     renderEmojiGrid();
     renderSuggestions();
@@ -476,6 +716,21 @@
     setTimeout(() => $("#taskNameInput").focus(), 100);
   }
   function closeTaskModal() { $("#taskModal").classList.add("hidden"); editingId = null; }
+
+  function renderTypeSelect() {
+    $$("#typeSelect .type-opt").forEach((el) => el.classList.toggle("active", el.dataset.type === draft.type));
+    const isDeadline = draft.type === "deadline";
+    $("#dueField").classList.toggle("hidden", !isDeadline);
+    $("#typeHint").textContent = isDeadline
+      ? "Persiste hasta la fecha. Registras tu avance poco a poco."
+      : "Se repite cada día para formar un hábito.";
+    // Fecha por defecto: dentro de 7 días si no hay ninguna.
+    const input = $("#taskDueInput");
+    if (isDeadline && !input.value) {
+      input.value = draft.due || todayStr(new Date(Date.now() + 7 * 86400000));
+    }
+    input.min = todayStr();
+  }
 
   function renderCatSelect() {
     $$("#catSelect .cat-opt").forEach((el) => {
@@ -504,18 +759,34 @@
   function saveTask() {
     const name = $("#taskNameInput").value.trim();
     if (!name) { $("#taskNameInput").focus(); return; }
+    const isDeadline = draft.type === "deadline";
+    const due = isDeadline ? ($("#taskDueInput").value || todayStr()) : "";
+
     if (editingId) {
       const t = state.tasks.find((x) => x.id === editingId);
-      t.name = name; t.cat = draft.cat; t.icon = draft.icon;
+      t.name = name; t.cat = draft.cat; t.icon = draft.icon; t.type = draft.type;
+      if (isDeadline) {
+        t.due = due;
+        if (typeof t.progress !== "number") t.progress = 0;
+        if (t.streak === undefined) t.streak = 0;
+      }
+    } else if (isDeadline) {
+      state.tasks.push({
+        id: "t" + state.xp + "_" + state.tasks.length + "_" + name.length + Math.floor(performance.now()),
+        name, cat: draft.cat, icon: draft.icon, type: "deadline",
+        due, progress: 0, createdDate: todayStr(), completedDate: null,
+      });
     } else {
       state.tasks.push({
         id: "t" + state.xp + "_" + state.tasks.length + "_" + name.length + Math.floor(performance.now()),
-        name, cat: draft.cat, icon: draft.icon,
+        name, cat: draft.cat, icon: draft.icon, type: "daily",
         streak: 0, bestStreak: 0, totalDone: 0, lastDone: null, doneToday: false,
       });
     }
+    const goToAgenda = isDeadline;
     save(); closeTaskModal(); render();
     checkAchievements();
+    if (goToAgenda) switchView("agenda");
   }
 
   function deleteTask() {
@@ -527,15 +798,16 @@
   /* ----------------------------------------------------------
      Recompensa + confeti + toast + haptics
      ---------------------------------------------------------- */
-  function showReward({ xpGain, coinGain, streak, streakBonus, task }) {
+  function showReward({ xpGain, coinGain, streak, streakBonus, task, title, subtitle }) {
+    const s = streak || 0;
     const emojis = ["🎉", "⭐", "🌟", "💫", "🎊", "🥳", "🙌", "✅"];
-    $("#rewardEmoji").textContent = emojis[Math.floor(task.name.length + streak) % emojis.length];
-    $("#rewardTitle").textContent = pickPraise(streak);
+    $("#rewardEmoji").textContent = emojis[Math.floor(task.name.length + s) % emojis.length];
+    $("#rewardTitle").textContent = title || pickPraise(s);
     $("#rewardGains").innerHTML =
       `<div class="reward-gain">+${xpGain} XP</div><div class="reward-gain">🪙 +${coinGain}</div>`;
-    $("#rewardStreak").textContent = streak > 1
-      ? `🔥 Racha de ${streak} días${streakBonus > 0 ? ` (+${streakBonus} bonus)` : ""}`
-      : "¡Empiezas una nueva racha!";
+    $("#rewardStreak").textContent = subtitle !== undefined ? subtitle : (s > 1
+      ? `🔥 Racha de ${s} días${streakBonus > 0 ? ` (+${streakBonus} bonus)` : ""}`
+      : "¡Empiezas una nueva racha!");
     const pop = $("#rewardPopup");
     pop.classList.remove("hidden");
     // Animación de la mascota
@@ -640,9 +912,9 @@
       state.player.companion = chosen;
       // Semillas de ejemplo para arrancar rápido
       state.tasks = [
-        { id: "seed1", name: "Levantarme temprano", cat: "personal", icon: "☀️", streak: 0, bestStreak: 0, totalDone: 0, lastDone: null, doneToday: false },
-        { id: "seed2", name: "Tender la cama", cat: "hogar", icon: "🛏️", streak: 0, bestStreak: 0, totalDone: 0, lastDone: null, doneToday: false },
-        { id: "seed3", name: "Beber agua", cat: "personal", icon: "💧", streak: 0, bestStreak: 0, totalDone: 0, lastDone: null, doneToday: false },
+        { id: "seed1", name: "Levantarme temprano", cat: "personal", icon: "☀️", type: "daily", streak: 0, bestStreak: 0, totalDone: 0, lastDone: null, doneToday: false },
+        { id: "seed2", name: "Tender la cama", cat: "hogar", icon: "🛏️", type: "daily", streak: 0, bestStreak: 0, totalDone: 0, lastDone: null, doneToday: false },
+        { id: "seed3", name: "Beber agua", cat: "personal", icon: "💧", type: "daily", streak: 0, bestStreak: 0, totalDone: 0, lastDone: null, doneToday: false },
       ];
       save();
       boot();
@@ -674,6 +946,9 @@
     $$(".tab[data-view]").forEach((el) => el.addEventListener("click", () => switchView(el.dataset.view)));
     $("#addTaskFab").addEventListener("click", () => openTaskModal(null));
 
+    // Tienda (ahora accesible desde el botón del encabezado)
+    $("#shopBtn").addEventListener("click", () => switchView("shop"));
+
     // Modal tareas
     $("#closeTaskModal").addEventListener("click", closeTaskModal);
     $("#taskModal").addEventListener("click", (e) => { if (e.target.id === "taskModal") closeTaskModal(); });
@@ -682,6 +957,32 @@
     $$("#catSelect .cat-opt").forEach((el) => el.addEventListener("click", () => {
       draft.cat = el.dataset.cat; renderCatSelect(); renderSuggestions();
     }));
+    $$("#typeSelect .type-opt").forEach((el) => el.addEventListener("click", () => {
+      draft.type = el.dataset.type; renderTypeSelect();
+    }));
+    $("#taskDueInput").addEventListener("change", (e) => { draft.due = e.target.value; });
+
+    // Calendario
+    $("#calPrev").addEventListener("click", () => {
+      calView.month--; if (calView.month < 0) { calView.month = 11; calView.year--; } renderCalendar();
+    });
+    $("#calNext").addEventListener("click", () => {
+      calView.month++; if (calView.month > 11) { calView.month = 0; calView.year++; } renderCalendar();
+    });
+
+    // Modal de avance
+    $("#closeProgressModal").addEventListener("click", closeProgressModal);
+    $("#progressModal").addEventListener("click", (e) => { if (e.target.id === "progressModal") closeProgressModal(); });
+    $$("#progressQuick button").forEach((b) => b.addEventListener("click", () => advanceDeadline(progressTaskId, parseInt(b.dataset.add, 10))));
+    $("#completeDeadlineBtn").addEventListener("click", () => {
+      const t = state.tasks.find((x) => x.id === progressTaskId);
+      if (t) advanceDeadline(progressTaskId, 100 - (t.progress || 0));
+    });
+    $("#deleteDeadlineBtn").addEventListener("click", () => {
+      if (!progressTaskId) return;
+      state.tasks = state.tasks.filter((x) => x.id !== progressTaskId);
+      closeProgressModal(); save(); render(); renderAgenda();
+    });
 
     // Ajustes
     $("#settingsBtn").addEventListener("click", openSettings);

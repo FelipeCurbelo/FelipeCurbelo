@@ -352,6 +352,94 @@ input { -webkit-user-select: text; user-select: text; }
 }
 @keyframes toastIn { from { transform: translate(-50%, 20px); opacity: 0;} to { transform: translate(-50%,0); opacity:1; } }
 
+/* ============================================================
+   AGENDA / CALENDARIO / TAREAS CON FECHA
+   ============================================================ */
+.type-select { display: flex; gap: 8px; }
+.type-opt {
+  flex: 1; border: 2px solid transparent; background: var(--surface-2); color: var(--text);
+  padding: 12px 6px; border-radius: 14px; font-weight: 700; font-size: 13px; cursor: pointer; transition: .15s;
+}
+.type-opt.active { border-color: var(--primary); background: var(--bg-2); }
+.type-hint { font-size: 12px; color: var(--text-soft); margin: 8px 2px 0; }
+
+/* Recordatorio en Hoy */
+.deadline-reminder { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 12px; scrollbar-width: none; }
+.deadline-reminder::-webkit-scrollbar { display: none; }
+.remind-chip {
+  flex: none; display: flex; align-items: center; gap: 6px; background: var(--surface);
+  padding: 9px 12px; border-radius: 14px; font-size: 13px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.05); border-left: 4px solid var(--urg, var(--primary));
+}
+.remind-chip .rc-days { color: var(--urg, var(--primary)); font-weight: 800; }
+
+/* Calendario */
+.calendar { background: var(--surface); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); margin-bottom: 8px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-month { font-weight: 800; font-size: 16px; text-transform: capitalize; }
+.cal-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin-bottom: 6px; }
+.cal-weekdays span { text-align: center; font-size: 11px; font-weight: 800; color: var(--text-soft); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-day {
+  aspect-ratio: 1; border: none; background: var(--surface-2); color: var(--text);
+  border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; position: relative;
+  display: grid; place-items: center; transition: transform .1s;
+}
+.cal-day:active { transform: scale(0.9); }
+.cal-day.empty { background: transparent; cursor: default; }
+.cal-day.today { outline: 2px solid var(--primary); }
+.cal-day.has-due { color: #fff; }
+.cal-day .dot {
+  position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);
+  width: 6px; height: 6px; border-radius: 50%; background: var(--dotc, var(--accent));
+}
+.cal-day.due-soon { background: var(--trabajo); color: #fff; }
+.cal-day.due-far { background: rgba(38,194,129,.22); }
+.cal-day.due-over { background: #ff5a6a; color: #fff; }
+
+/* Lista de entregas */
+.deadline-list { display: flex; flex-direction: column; gap: 10px; }
+.deadline-card {
+  background: var(--surface); border-radius: 16px; padding: 14px; box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+  border-left: 4px solid var(--urg, var(--primary));
+}
+.deadline-card.done { opacity: .6; }
+.dc-top { display: flex; align-items: center; gap: 10px; }
+.dc-icon { font-size: 24px; flex: none; }
+.dc-body { flex: 1; min-width: 0; }
+.dc-name { font-weight: 700; font-size: 15px; line-height: 1.2; }
+.dc-name.done { text-decoration: line-through; }
+.dc-due { font-size: 12px; font-weight: 700; color: var(--urg, var(--text-soft)); margin-top: 3px; }
+.dc-pct { font-size: 15px; font-weight: 900; color: var(--text); flex: none; }
+.dc-bar { height: 8px; background: var(--surface-2); border-radius: 8px; overflow: hidden; margin: 10px 0; }
+.dc-bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); border-radius: 8px; transition: width .5s; }
+.dc-bar.done > i { background: linear-gradient(90deg, var(--gold), var(--green)); }
+.dc-advance {
+  border: none; background: var(--primary); color: #fff; width: 100%; padding: 10px;
+  border-radius: 12px; font-weight: 800; font-size: 14px; cursor: pointer; transition: transform .1s;
+}
+.dc-advance:active { transform: scale(0.96); }
+.dc-advance.done { background: var(--surface-2); color: var(--green); }
+
+/* Modal de avance */
+.progress-big { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.progress-big-circle {
+  width: 64px; height: 64px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: conic-gradient(var(--primary) var(--p, 0%), var(--surface-2) 0);
+  font-weight: 900; font-size: 15px;
+}
+.progress-big-circle span { background: var(--surface); width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; }
+.progress-big-name { font-weight: 800; font-size: 16px; }
+.progress-big-due { font-size: 13px; color: var(--text-soft); margin-top: 2px; }
+.progress-big-bar { height: 12px; background: var(--surface-2); border-radius: 12px; overflow: hidden; margin: 6px 0 4px; }
+.progress-big-bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--primary), var(--accent)); border-radius: 12px; transition: width .5s; }
+.progress-quick { display: flex; gap: 8px; margin: 14px 0; }
+.progress-quick button {
+  flex: 1; border: 2px solid var(--primary); background: transparent; color: var(--primary);
+  padding: 14px 6px; border-radius: 14px; font-weight: 800; font-size: 15px; cursor: pointer; transition: .12s;
+}
+.progress-quick button:active { transform: scale(0.94); background: var(--bg-2); }
+
 @media (min-width: 540px) {
   .hero-percent { font-size: 40px; }
 }

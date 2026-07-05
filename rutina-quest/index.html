@@ -46,6 +46,7 @@
         </div>
       </div>
       <div class="wallet">
+        <button class="icon-btn" id="shopBtn" title="Tienda" aria-label="Tienda">🛍️</button>
         <button class="icon-btn" id="settingsBtn" title="Ajustes" aria-label="Ajustes">⚙️</button>
         <div class="coins" title="Monedas"><span class="coin-icon">🪙</span><span id="coinCount">0</span></div>
       </div>
@@ -67,6 +68,9 @@
         <div class="hero-mood" id="heroMood">Tu compañero está esperando… ¡empieza con una tarea fácil!</div>
       </div>
     </section>
+
+    <!-- Recordatorio de entregas próximas (se muestra si hay fechas cercanas) -->
+    <section class="deadline-reminder hidden" id="deadlineReminder"></section>
 
     <!-- Filtros por categoría -->
     <nav class="filters" id="filters">
@@ -92,6 +96,25 @@
       <div class="shop-grid" id="shopGrid"></div>
     </section>
 
+    <!-- Vista de agenda / calendario (oculta por defecto) -->
+    <section class="panel hidden" id="agendaPanel">
+      <h2 class="panel-title">📅 Agenda</h2>
+      <p class="panel-sub">Tareas con fecha de entrega. Registra tu avance poco a poco.</p>
+      <div class="calendar">
+        <div class="cal-head">
+          <button class="icon-btn" id="calPrev" aria-label="Mes anterior">‹</button>
+          <span class="cal-month" id="calMonthLabel">Mes</span>
+          <button class="icon-btn" id="calNext" aria-label="Mes siguiente">›</button>
+        </div>
+        <div class="cal-weekdays">
+          <span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+      <h3 class="panel-subtitle">Próximas entregas</h3>
+      <div class="deadline-list" id="deadlineList"></div>
+    </section>
+
     <!-- Vista de estadísticas (oculta por defecto) -->
     <section class="panel hidden" id="statsPanel">
       <h2 class="panel-title">📊 Progreso</h2>
@@ -103,9 +126,9 @@
     <!-- Barra de navegación inferior -->
     <nav class="tabbar">
       <button class="tab active" data-view="home">🏡<span>Hoy</span></button>
-      <button class="tab" data-view="stats">📊<span>Progreso</span></button>
+      <button class="tab" data-view="agenda">📅<span>Agenda</span></button>
       <button class="tab tab-add" id="addTaskFab" aria-label="Añadir tarea">＋</button>
-      <button class="tab" data-view="shop">🛍️<span>Tienda</span></button>
+      <button class="tab" data-view="stats">📊<span>Progreso</span></button>
       <button class="tab" data-view="achievements">🏆<span>Logros</span></button>
     </nav>
   </main>
@@ -120,6 +143,20 @@
       <label class="field">
         <span>Nombre de la tarea</span>
         <input id="taskNameInput" type="text" maxlength="40" placeholder="Ej: Tender la cama" autocomplete="off" />
+      </label>
+
+      <div class="field">
+        <span>Tipo de tarea</span>
+        <div class="type-select" id="typeSelect">
+          <button type="button" class="type-opt active" data-type="daily">🔁 Hábito diario</button>
+          <button type="button" class="type-opt" data-type="deadline">📅 Con fecha límite</button>
+        </div>
+        <p class="type-hint" id="typeHint">Se repite cada día para formar un hábito.</p>
+      </div>
+
+      <label class="field hidden" id="dueField">
+        <span>Fecha de entrega</span>
+        <input id="taskDueInput" type="date" />
       </label>
 
       <div class="field">
@@ -168,6 +205,34 @@
       <button id="saveSettingsBtn" class="btn btn-primary btn-lg">Guardar</button>
       <button id="resetBtn" class="btn btn-ghost">Reiniciar todo el progreso</button>
       <p class="settings-credit">Rutina Quest · tu progreso se guarda en este dispositivo.</p>
+    </div>
+  </div>
+
+  <!-- ======================= MODAL: REGISTRAR AVANCE ======================= -->
+  <div class="modal-overlay hidden" id="progressModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="progressTitle">Registrar avance</h2>
+        <button class="icon-btn" id="closeProgressModal" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="progress-big">
+        <div class="progress-big-circle">
+          <span id="progressBigPct">0%</span>
+        </div>
+        <div class="progress-big-info">
+          <div class="progress-big-name" id="progressBigName">Tarea</div>
+          <div class="progress-big-due" id="progressBigDue"></div>
+        </div>
+      </div>
+      <div class="progress-big-bar"><i id="progressBigFill"></i></div>
+      <p class="type-hint">¿Cuánto avanzaste? Cada avance te da recompensa.</p>
+      <div class="progress-quick" id="progressQuick">
+        <button type="button" data-add="10">+10%</button>
+        <button type="button" data-add="25">+25%</button>
+        <button type="button" data-add="50">+50%</button>
+      </div>
+      <button id="completeDeadlineBtn" class="btn btn-primary btn-lg">✓ Marcar como terminada</button>
+      <button id="deleteDeadlineBtn" class="btn btn-ghost">🗑️ Eliminar tarea</button>
     </div>
   </div>
 
