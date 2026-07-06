@@ -42,7 +42,6 @@ cuenta, servidor ni instalación de tiendas de apps.
 
 ## 🚀 Cómo abrirlo
 
-**Opción rápida (local):**
 
 ```bash
 cd rutina-quest
@@ -53,8 +52,6 @@ python3 -m http.server 8099
 **En el teléfono/tablet:** abre la URL y usa *"Añadir a pantalla de inicio"* para
 instalarlo como app a pantalla completa.
 
-**Publicarlo gratis con GitHub Pages:** activa Pages en el repositorio y el juego
-quedará disponible en `https://<usuario>.github.io/rutina-quest/`.
 
 ## 🧩 Estructura
 
@@ -68,5 +65,4 @@ rutina-quest/
 └── icons/                Iconos de la app (+ script que los genera)
 ```
 
-Todo está hecho en **HTML, CSS y JavaScript puro**, sin dependencias ni frameworks.
 El progreso se guarda en `localStorage`, así que es privado y vive solo en tu dispositivo.
