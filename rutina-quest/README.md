@@ -55,8 +55,14 @@ cuenta, servidor ni instalación de tiendas de apps.
 - **Progreso del día:** anillo circular con el porcentaje de tareas completadas y
   mensajes que cambian según tu avance.
 - **Logros** 🏆 desbloqueables (primer hábito, semana perfecta, nivel 10…).
-- **Tienda** 🛍️ para gastar monedas en temas de color (Océano, Bosque, Atardecer,
-  Medianoche).
+- **Tienda** 🛍️ con cuatro secciones para gastar monedas:
+  - 🎨 **Temas** de color (Océano, Bosque, Atardecer, Medianoche).
+  - 🐾 **Mascota**: nuevos compañeros (gato, dragón, búho…) y accesorios que se
+    ven sobre tu mascota (sombrero, corona, gafas…).
+  - ⚡ **Poderes**: *Protector de racha* (salva tu racha si fallas un día) y
+    *Día doble* (x2 monedas y XP durante 24 h).
+  - 🎁 **Premios reales**: define tus propias recompensas de la vida real
+    (una pizza, un capítulo de tu serie…) y cámbialas por monedas.
 - **Estadísticas** 📊 de tareas completadas, mejor racha, hábitos formados y más.
 - Recordatorio háptico opcional (vibración) al completar una tarea.
 

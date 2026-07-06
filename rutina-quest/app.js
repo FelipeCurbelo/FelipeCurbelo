@@ -70,6 +70,35 @@
     { id: "midnight", name: "Medianoche",  cost: 250, c1: "#8b7dff", c2: "#ff6ec7" },
   ];
 
+  // Mascotas comprables (la planta es gratis y evoluciona con el nivel).
+  const COMPANIONS_SHOP = [
+    { emoji: "🌱", name: "Brote",    cost: 0 },
+    { emoji: "🐱", name: "Gato",     cost: 120 },
+    { emoji: "🐶", name: "Perro",    cost: 120 },
+    { emoji: "🐰", name: "Conejo",   cost: 150 },
+    { emoji: "🦊", name: "Zorro",    cost: 200 },
+    { emoji: "🐧", name: "Pingüino", cost: 200 },
+    { emoji: "🦉", name: "Búho",     cost: 260 },
+    { emoji: "🐉", name: "Dragón",   cost: 450 },
+  ];
+
+  // Accesorios que se ven sobre la mascota.
+  const ACCESSORIES = [
+    { emoji: "🎩", name: "Sombrero", cost: 60 },
+    { emoji: "🎀", name: "Lazo",     cost: 60 },
+    { emoji: "🕶️", name: "Gafas",    cost: 80 },
+    { emoji: "🧣", name: "Bufanda",  cost: 80 },
+    { emoji: "🍄", name: "Gorro",    cost: 100 },
+    { emoji: "🌟", name: "Aura",     cost: 120 },
+    { emoji: "👑", name: "Corona",   cost: 180 },
+  ];
+
+  // Poderes / potenciadores.
+  const POWERUPS = [
+    { id: "freeze", emoji: "🧊", name: "Protector de racha", cost: 50, desc: "Guárdalo y salva tu racha automáticamente si un día fallas." },
+    { id: "boost",  emoji: "⚡", name: "Día doble",          cost: 80, desc: "Duplica las monedas y la XP que ganes durante 24 horas." },
+  ];
+
   const ACHIEVEMENTS = [
     { id: "first",     icon: "🎉", name: "¡El primer paso!",   desc: "Completa tu primera tarea",            test: (s) => s.stats.totalDone >= 1 },
     { id: "streak3",   icon: "🔥", name: "En marcha",          desc: "Consigue una racha de 3 días",         test: (s) => maxStreak(s) >= 3 },
@@ -94,6 +123,7 @@
   let draft = { cat: "personal", icon: "☀️", type: "daily", due: "" };
   let calView = null;          // { year, month } del calendario visible
   let progressTaskId = null;   // tarea abierta en el modal de avance
+  let shopTab = "themes";      // pestaña activa de la tienda
 
   // Recompensa total de una tarea con fecha (se reparte según el avance).
   const DEADLINE_REWARD = { xp: 45, coins: 35 };
@@ -114,6 +144,12 @@
       tasks: [],
       unlockedThemes: ["default"],
       activeTheme: "default",
+      ownedCompanions: ["🌱"],
+      ownedAccessories: [],
+      equippedAccessory: null,
+      inventory: { freeze: 0 },
+      boostUntil: 0,
+      customRewards: [],
       achievements: [],
       settings: { habitGoal: 21, haptics: true, notify: false, notifyDays: 3 },
       stats: { totalDone: 0, totalCoins: 0, perfectDays: 0, deadlinesDone: 0 },
@@ -129,6 +165,13 @@
         // Migración: valores nuevos que pueden faltar en partidas anteriores.
         state.stats = Object.assign({ totalDone: 0, totalCoins: 0, perfectDays: 0, deadlinesDone: 0 }, state.stats);
         state.settings = Object.assign({ habitGoal: 21, haptics: true, notify: false, notifyDays: 3 }, state.settings);
+        if (!Array.isArray(state.ownedCompanions)) state.ownedCompanions = ["🌱"];
+        if (!state.ownedCompanions.includes(state.player.companion)) state.ownedCompanions.push(state.player.companion);
+        if (!Array.isArray(state.ownedAccessories)) state.ownedAccessories = [];
+        if (state.equippedAccessory === undefined) state.equippedAccessory = null;
+        state.inventory = Object.assign({ freeze: 0 }, state.inventory);
+        if (typeof state.boostUntil !== "number") state.boostUntil = 0;
+        if (!Array.isArray(state.customRewards)) state.customRewards = [];
         state.tasks.forEach((t) => { if (!t.type) t.type = "daily"; });
       }
     } catch (e) { /* ignora datos corruptos */ }
@@ -147,6 +190,18 @@
     if (state.lastOpen === today) return;
 
     const yesterday = todayStr(new Date(Date.now() - 86400000));
+
+    // Protector de racha: si solo se saltó AYER (y hay un protector), lo gasta
+    // y salva todas las rachas en riesgo tratando ayer como completado.
+    const atRisk = state.tasks.filter((t) =>
+      (t.type || "daily") === "daily" && (t.streak || 0) > 0 && t.lastDone && daysBetween(t.lastDone, today) === 2
+    );
+    if (atRisk.length && (state.inventory.freeze || 0) > 0) {
+      state.inventory.freeze -= 1;
+      atRisk.forEach((t) => { t.lastDone = yesterday; });
+      state._freezeSaved = atRisk.length;
+    }
+
     state.tasks.forEach((t) => {
       if ((t.type || "daily") !== "daily") return; // las tareas con fecha no se reinician
       // Si la última vez completada no fue hoy ni ayer, la racha se rompe.
@@ -176,6 +231,10 @@
   }
   function maxStreak(s) { return s.tasks.reduce((m, t) => Math.max(m, t.bestStreak || 0), 0); }
 
+  // ¿Está activo el "Día doble"? (multiplica monedas y XP)
+  function boostActive() { return (state.boostUntil || 0) > nowMs(); }
+  function nowMs() { return new Date().getTime(); }
+
   /* ----------------------------------------------------------
      Acción principal: completar una tarea
      ---------------------------------------------------------- */
@@ -201,6 +260,8 @@
     // Bonus por racha: +1 moneda por cada día de racha (tope +15)
     const streakBonus = Math.min(t.streak - 1, 15);
     coinGain += streakBonus;
+    // Día doble: x2 monedas y XP
+    if (boostActive()) { xpGain *= 2; coinGain *= 2; }
 
     const beforeLevel = level(state.xp);
     state.xp += xpGain;
@@ -266,8 +327,9 @@
     if (delta <= 0) return;
 
     t.progress = after;
-    const xpGain = Math.max(1, Math.round((DEADLINE_REWARD.xp * delta) / 100));
-    const coinGain = Math.max(1, Math.round((DEADLINE_REWARD.coins * delta) / 100));
+    let xpGain = Math.max(1, Math.round((DEADLINE_REWARD.xp * delta) / 100));
+    let coinGain = Math.max(1, Math.round((DEADLINE_REWARD.coins * delta) / 100));
+    if (boostActive()) { xpGain *= 2; coinGain *= 2; }
 
     const beforeLevel = level(state.xp);
     state.xp += xpGain;
@@ -329,6 +391,16 @@
     const mascot = state.player.companion === "🌱" ? stage : state.player.companion;
     $("#playerAvatar").textContent = mascot;
     $("#heroMascot").textContent = mascot;
+    $("#heroAcc").textContent = state.equippedAccessory || "";
+
+    // Indicador de "Día doble"
+    const boostChip = $("#boostChip");
+    if (boostActive()) {
+      boostChip.classList.remove("hidden");
+      $("#boostTime").textContent = boostLabel();
+    } else {
+      boostChip.classList.add("hidden");
+    }
 
     // Progreso del día (solo hábitos diarios)
     const daily = state.tasks.filter((t) => (t.type || "daily") === "daily");
@@ -431,34 +503,182 @@
   }
 
   function renderShop() {
-    $("#shopGrid").innerHTML = THEMES.map((th) => {
+    $$("#shopTabs .shop-tab").forEach((el) => el.classList.toggle("active", el.dataset.shop === shopTab));
+    if (shopTab === "themes") renderShopThemes();
+    else if (shopTab === "pet") renderShopPet();
+    else if (shopTab === "power") renderShopPower();
+    else if (shopTab === "rewards") renderShopRewards();
+  }
+
+  function canPay(cost) { return state.coins >= cost; }
+
+  /* ----- Temas ----- */
+  function renderShopThemes() {
+    const html = `<p class="shop-note">Cambia los colores de todo el juego.</p>
+      <div class="shop-grid">` + THEMES.map((th) => {
       const owned = state.unlockedThemes.includes(th.id);
       const active = state.activeTheme === th.id;
       let btn;
       if (active) btn = `<button class="shop-btn active-theme" disabled>✓ En uso</button>`;
       else if (owned) btn = `<button class="shop-btn owned" data-use="${th.id}">Usar</button>`;
-      else btn = `<button class="shop-btn" data-buy="${th.id}" ${state.coins < th.cost ? "disabled" : ""}>🪙 ${th.cost}</button>`;
+      else btn = `<button class="shop-btn" data-buy="${th.id}" ${canPay(th.cost) ? "" : "disabled"}>🪙 ${th.cost}</button>`;
       return `<div class="shop-item">
         <div class="shop-preview" style="background:linear-gradient(135deg, ${th.c1}, ${th.c2})"></div>
-        <div class="shop-name">${th.name}</div>
-        ${btn}
+        <div class="shop-name">${th.name}</div>${btn}</div>`;
+    }).join("") + `</div>`;
+    $("#shopContent").innerHTML = html;
+    $$("[data-buy]").forEach((el) => el.addEventListener("click", () => buyTheme(el.dataset.buy)));
+    $$("[data-use]").forEach((el) => el.addEventListener("click", () => { state.activeTheme = el.dataset.use; applyTheme(); save(); renderShop(); }));
+  }
+  function buyTheme(id) {
+    const th = THEMES.find((x) => x.id === id);
+    if (!th || !canPay(th.cost)) return;
+    state.coins -= th.cost; state.unlockedThemes.push(id); state.activeTheme = id;
+    applyTheme(); save(); render(); renderShop();
+    toast(`🎨 ¡Tema "${th.name}" desbloqueado!`); haptic();
+  }
+
+  /* ----- Mascota: compañeros + accesorios ----- */
+  function renderShopPet() {
+    const comp = `<p class="shop-note">Elige tu compañero. 🌱 El brote evoluciona con tu nivel.</p>
+      <div class="shop-grid">` + COMPANIONS_SHOP.map((c) => {
+      const owned = state.ownedCompanions.includes(c.emoji);
+      const active = state.player.companion === c.emoji;
+      let btn;
+      if (active) btn = `<button class="shop-btn active-theme" disabled>✓ En uso</button>`;
+      else if (owned) btn = `<button class="shop-btn owned" data-usecomp="${c.emoji}">Usar</button>`;
+      else btn = `<button class="shop-btn" data-buycomp="${c.emoji}" ${canPay(c.cost) ? "" : "disabled"}>🪙 ${c.cost}</button>`;
+      return `<div class="shop-item ${owned ? "" : "locked"}">
+        <div class="pet-preview">${c.emoji}</div>
+        <div class="shop-name">${c.name}</div>${btn}</div>`;
+    }).join("") + `</div>`;
+
+    const acc = `<h3 class="panel-subtitle">🎩 Accesorios</h3>
+      <p class="shop-note">Se ven sobre tu mascota. Toca "Quitar" para no usar ninguno.</p>
+      <div class="shop-grid">` +
+      `<div class="shop-item"><div class="pet-preview">🚫</div><div class="shop-name">Ninguno</div>
+        ${state.equippedAccessory ? `<button class="shop-btn owned" data-useacc="">Quitar</button>` : `<button class="shop-btn active-theme" disabled>✓ En uso</button>`}</div>` +
+      ACCESSORIES.map((a) => {
+        const owned = state.ownedAccessories.includes(a.emoji);
+        const active = state.equippedAccessory === a.emoji;
+        let btn;
+        if (active) btn = `<button class="shop-btn active-theme" disabled>✓ En uso</button>`;
+        else if (owned) btn = `<button class="shop-btn owned" data-useacc="${a.emoji}">Usar</button>`;
+        else btn = `<button class="shop-btn" data-buyacc="${a.emoji}" ${canPay(a.cost) ? "" : "disabled"}>🪙 ${a.cost}</button>`;
+        return `<div class="shop-item ${owned ? "" : "locked"}">
+          <div class="pet-preview">${a.emoji}</div>
+          <div class="shop-name">${a.name}</div>${btn}</div>`;
+      }).join("") + `</div>`;
+
+    $("#shopContent").innerHTML = comp + acc;
+    $$("[data-buycomp]").forEach((el) => el.addEventListener("click", () => buyCompanion(el.dataset.buycomp)));
+    $$("[data-usecomp]").forEach((el) => el.addEventListener("click", () => { state.player.companion = el.dataset.usecomp; save(); render(); renderShop(); }));
+    $$("[data-buyacc]").forEach((el) => el.addEventListener("click", () => buyAccessory(el.dataset.buyacc)));
+    $$("[data-useacc]").forEach((el) => el.addEventListener("click", () => { state.equippedAccessory = el.dataset.useacc || null; save(); render(); renderShop(); }));
+  }
+  function buyCompanion(emoji) {
+    const c = COMPANIONS_SHOP.find((x) => x.emoji === emoji);
+    if (!c || !canPay(c.cost)) return;
+    state.coins -= c.cost; state.ownedCompanions.push(emoji); state.player.companion = emoji;
+    save(); render(); renderShop(); toast(`${emoji} ¡Nuevo compañero desbloqueado!`); haptic();
+  }
+  function buyAccessory(emoji) {
+    const a = ACCESSORIES.find((x) => x.emoji === emoji);
+    if (!a || !canPay(a.cost)) return;
+    state.coins -= a.cost; state.ownedAccessories.push(emoji); state.equippedAccessory = emoji;
+    save(); render(); renderShop(); toast(`${emoji} ¡Accesorio equipado!`); haptic();
+  }
+
+  /* ----- Poderes ----- */
+  function renderShopPower() {
+    const html = `<p class="shop-note">Objetos que te ayudan a mantener la constancia.</p>` +
+      POWERUPS.map((p) => {
+        let extra = "", btnLabel = `🪙 ${p.cost}`;
+        if (p.id === "freeze") extra = `<div class="power-own">Tienes: ${state.inventory.freeze || 0} 🧊</div>`;
+        if (p.id === "boost") {
+          if (boostActive()) extra = `<div class="power-own">Activo · quedan ${boostLabel()}</div>`;
+          btnLabel = boostActive() ? "Ampliar +24h" : `🪙 ${p.cost}`;
+        }
+        const dis = canPay(p.cost) ? "" : "disabled";
+        return `<div class="power-item">
+          <div class="power-emoji">${p.emoji}</div>
+          <div class="power-body">
+            <div class="power-name">${p.name}</div>
+            <div class="power-desc">${p.desc}</div>${extra}
+          </div>
+          <button class="power-buy ${p.id === "boost" && boostActive() ? "on" : ""}" data-power="${p.id}" ${dis}>${btnLabel}</button>
+        </div>`;
+      }).join("");
+    $("#shopContent").innerHTML = html;
+    $$("[data-power]").forEach((el) => el.addEventListener("click", () => buyPower(el.dataset.power)));
+  }
+  function buyPower(id) {
+    const p = POWERUPS.find((x) => x.id === id);
+    if (!p || !canPay(p.cost)) return;
+    state.coins -= p.cost;
+    if (id === "freeze") {
+      state.inventory.freeze = (state.inventory.freeze || 0) + 1;
+      toast("🧊 ¡Protector de racha guardado! Se usará solo si fallas un día.");
+    } else if (id === "boost") {
+      const base = boostActive() ? state.boostUntil : nowMs();
+      state.boostUntil = base + 24 * 3600000;
+      burstConfetti();
+      toast("⚡ ¡Día doble activado! x2 monedas y XP durante 24 h.");
+    }
+    save(); render(); renderShop(); haptic();
+  }
+
+  /* ----- Premios reales ----- */
+  function renderShopRewards() {
+    const list = state.customRewards.map((r) => {
+      const can = canPay(r.cost);
+      return `<div class="reward-item">
+        <span class="r-emoji">🎁</span>
+        <div class="r-body">
+          <div class="r-name">${escapeHTML(r.name)}</div>
+          <div class="r-sub">🪙 ${r.cost}${r.redeemed ? ` · canjeado ${r.redeemed}×` : ""}</div>
+        </div>
+        <button class="reward-redeem" data-redeem="${r.id}" ${can ? "" : "disabled"}>Canjear</button>
+        <button class="r-del" data-delreward="${r.id}" aria-label="Eliminar">🗑️</button>
       </div>`;
     }).join("");
 
-    $$("[data-buy]").forEach((el) => el.addEventListener("click", () => buyTheme(el.dataset.buy)));
-    $$("[data-use]").forEach((el) => el.addEventListener("click", () => {
-      state.activeTheme = el.dataset.use; applyTheme(); save(); renderShop();
-    }));
-  }
+    $("#shopContent").innerHTML = `
+      <p class="shop-note">Define premios de la vida real y cámbialos por monedas. ¡Tú decides tus recompensas!</p>
+      ${state.customRewards.length ? list : `<div class="alerts-empty"><div class="big">🎁</div><p>Aún no tienes premios.<br>Crea el primero abajo.</p></div>`}
+      <div class="create-reward">
+        <div class="shop-name">➕ Nuevo premio</div>
+        <div class="cr-row">
+          <input id="crName" type="text" maxlength="30" placeholder="Ej: Ver un capítulo" autocomplete="off" />
+        </div>
+        <div class="cr-row">
+          <input id="crCost" type="number" min="1" max="99999" placeholder="🪙 Costo" />
+          <button class="cr-add" id="crAdd">Crear</button>
+        </div>
+      </div>`;
 
-  function buyTheme(id) {
-    const th = THEMES.find((x) => x.id === id);
-    if (!th || state.coins < th.cost) return;
-    state.coins -= th.cost;
-    state.unlockedThemes.push(id);
-    state.activeTheme = id;
-    applyTheme(); save(); render(); renderShop();
-    toast(`🎨 ¡Tema "${th.name}" desbloqueado!`);
+    $$("[data-redeem]").forEach((el) => el.addEventListener("click", () => redeemReward(el.dataset.redeem)));
+    $$("[data-delreward]").forEach((el) => el.addEventListener("click", () => {
+      state.customRewards = state.customRewards.filter((r) => r.id !== el.dataset.delreward);
+      save(); renderShop();
+    }));
+    $("#crAdd").addEventListener("click", () => {
+      const name = $("#crName").value.trim();
+      const cost = parseInt($("#crCost").value, 10);
+      if (!name) { $("#crName").focus(); return; }
+      if (isNaN(cost) || cost < 1) { $("#crCost").focus(); return; }
+      state.customRewards.push({ id: "r" + Math.floor(performance.now()) + state.customRewards.length, name, cost, redeemed: 0 });
+      save(); renderShop();
+    });
+  }
+  function redeemReward(id) {
+    const r = state.customRewards.find((x) => x.id === id);
+    if (!r || !canPay(r.cost)) return;
+    state.coins -= r.cost;
+    r.redeemed = (r.redeemed || 0) + 1;
+    save(); render(); renderShop();
+    burstConfetti();
+    showReward({ xpGain: 0, coinGain: 0, task: { name: r.name }, title: "¡Premio canjeado! 🎁", subtitle: `Disfruta: ${r.name}. ¡Te lo ganaste!` });
     haptic();
   }
 
@@ -925,8 +1145,9 @@
     const emojis = ["🎉", "⭐", "🌟", "💫", "🎊", "🥳", "🙌", "✅"];
     $("#rewardEmoji").textContent = emojis[Math.floor(task.name.length + s) % emojis.length];
     $("#rewardTitle").textContent = title || pickPraise(s);
-    $("#rewardGains").innerHTML =
-      `<div class="reward-gain">+${xpGain} XP</div><div class="reward-gain">🪙 +${coinGain}</div>`;
+    $("#rewardGains").innerHTML = (xpGain || coinGain)
+      ? `<div class="reward-gain">+${xpGain} XP</div><div class="reward-gain">🪙 +${coinGain}</div>`
+      : "";
     $("#rewardStreak").textContent = subtitle !== undefined ? subtitle : (s > 1
       ? `🔥 Racha de ${s} días${streakBonus > 0 ? ` (+${streakBonus} bonus)` : ""}`
       : "¡Empiezas una nueva racha!");
@@ -1032,6 +1253,7 @@
       state = defaultState();
       state.player.name = name;
       state.player.companion = chosen;
+      if (!state.ownedCompanions.includes(chosen)) state.ownedCompanions.push(chosen);
       // Semillas de ejemplo para arrancar rápido
       state.tasks = [
         { id: "seed1", name: "Levantarme temprano", cat: "personal", icon: "☀️", type: "daily", streak: 0, bestStreak: 0, totalDone: 0, lastDone: null, doneToday: false },
@@ -1055,6 +1277,18 @@
     switchView("home");
     // Avisos: animar la campana y notificar al abrir (si está activado).
     setTimeout(() => { renderAlertBadge(true); notifyDeadlines(); }, 800);
+    if (state._freezeSaved) {
+      const n = state._freezeSaved; delete state._freezeSaved; save();
+      setTimeout(() => toast(`🧊 ¡Tu protector de racha salvó ${n === 1 ? "una racha" : n + " rachas"}! Sigue así.`), 1200);
+    }
+  }
+
+  function boostLabel() {
+    const ms = (state.boostUntil || 0) - nowMs();
+    const h = Math.floor(ms / 3600000);
+    if (h >= 1) return h + "h";
+    const m = Math.max(1, Math.floor(ms / 60000));
+    return m + "m";
   }
 
   function wireEvents() {
@@ -1072,6 +1306,7 @@
 
     // Tienda (ahora accesible desde el botón del encabezado)
     $("#shopBtn").addEventListener("click", () => switchView("shop"));
+    $$("#shopTabs .shop-tab").forEach((el) => el.addEventListener("click", () => { shopTab = el.dataset.shop; renderShop(); }));
 
     // Avisos
     $("#alertsBtn").addEventListener("click", openAlerts);

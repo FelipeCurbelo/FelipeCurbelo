@@ -53,6 +53,9 @@
       </div>
     </header>
 
+    <!-- Banda de "Día doble" (visible solo si el boost está activo) -->
+    <div class="boost-banner hidden" id="boostChip">⚡ <b>Día doble</b> activo · x2 monedas y XP · quedan <span id="boostTime">24h</span></div>
+
     <!-- Zona de la mascota + progreso del día -->
     <section class="hero">
       <div class="hero-glow"></div>
@@ -62,6 +65,7 @@
           <circle class="ring-fill" id="ringFill" cx="60" cy="60" r="52"></circle>
         </svg>
         <div class="hero-mascot" id="heroMascot">🌱</div>
+        <div class="mascot-acc" id="heroAcc"></div>
       </div>
       <div class="hero-text">
         <div class="hero-percent" id="heroPercent">0%</div>
@@ -93,8 +97,13 @@
     <!-- Vista de tienda (oculta por defecto) -->
     <section class="panel hidden" id="shopPanel">
       <h2 class="panel-title">🛍️ Tienda</h2>
-      <p class="panel-sub">Gasta tus monedas en temas para personalizar tu juego.</p>
-      <div class="shop-grid" id="shopGrid"></div>
+      <nav class="shop-tabs" id="shopTabs">
+        <button class="shop-tab active" data-shop="themes">🎨 Temas</button>
+        <button class="shop-tab" data-shop="pet">🐾 Mascota</button>
+        <button class="shop-tab" data-shop="power">⚡ Poderes</button>
+        <button class="shop-tab" data-shop="rewards">🎁 Premios</button>
+      </nav>
+      <div id="shopContent"></div>
     </section>
 
     <!-- Vista de agenda / calendario (oculta por defecto) -->
