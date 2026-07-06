@@ -1,5 +1,5 @@
 /* Service Worker de Rutina Quest — permite jugar sin conexión. */
-const CACHE = "rutina-quest-v2";
+const CACHE = "rutina-quest-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -33,16 +33,18 @@ self.addEventListener("notificationclick", (e) => {
   );
 });
 
+// Estrategia "network-first": intenta la red (así siempre cargas la última
+// versión), y si no hay conexión, usa la copia en caché. Cada respuesta buena
+// actualiza la caché para poder jugar offline.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   e.respondWith(
-    caches.match(e.request).then((cached) =>
-      cached ||
-      fetch(e.request).then((res) => {
+    fetch(e.request)
+      .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
         return res;
-      }).catch(() => cached)
-    )
+      })
+      .catch(() => caches.match(e.request).then((cached) => cached || caches.match("./index.html")))
   );
 });
