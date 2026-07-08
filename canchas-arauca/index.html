@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b6e4f" />
+  <meta name="description" content="CanchApp Arauca: encuentra canchas de futsal y sintética en Arauca, consulta disponibilidad, reserva y paga desde tu celular." />
+  <title>CanchApp Arauca ⚽</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E⚽%3C/text%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <!-- Leaflet (mapa OpenStreetMap, sin API key) — vendorizado, sin CDN -->
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ======================= PANTALLA DE BIENVENIDA ======================= -->
+  <section id="onboarding" class="screen onboarding">
+    <div class="onboarding-card">
+      <div class="onboarding-logo" aria-hidden="true">⚽</div>
+      <h1>CanchApp <span>Arauca</span></h1>
+      <p class="tagline">Todas las canchas de futsal y sintética de la ciudad, en un solo lugar. Mira cuáles están libres, reserva y paga desde tu celular.</p>
+      <ul class="onboarding-points">
+        <li><span>🗺️</span> Mapa con todas las canchas de Arauca</li>
+        <li><span>🕒</span> Consulta horarios disponibles en tiempo real</li>
+        <li><span>✅</span> Reserva tu hora en segundos</li>
+        <li><span>💳</span> Paga en efectivo, Nequi o en línea</li>
+      </ul>
+      <label class="field">
+        <span>¿Cómo te llamas?</span>
+        <input id="playerNameInput" type="text" maxlength="24" placeholder="Tu nombre" autocomplete="name" />
+      </label>
+      <label class="field">
+        <span>Tu WhatsApp (para confirmar reservas)</span>
+        <input id="playerPhoneInput" type="tel" maxlength="15" placeholder="Ej: 3001234567" inputmode="numeric" autocomplete="tel" />
+      </label>
+      <button id="startBtn" class="btn btn-primary btn-lg">Entrar ⚽</button>
+      <p class="onboarding-hint">Tus datos se guardan solo en este dispositivo.</p>
+    </div>
+  </section>
+
+  <!-- ======================= APP PRINCIPAL ======================= -->
+  <main id="app" class="app hidden">
+    <!-- Cabecera -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-logo">⚽</span>
+        <div class="brand-text">
+          <strong>CanchApp</strong>
+          <small>Arauca, Arauca</small>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="locateBtn" title="Mi ubicación" aria-label="Mi ubicación">📍</button>
+        <button class="icon-btn" id="settingsBtn" title="Ajustes" aria-label="Ajustes">⚙️</button>
+      </div>
+    </header>
+
+    <!-- Barra de búsqueda + filtros -->
+    <div class="searchbar">
+      <div class="search-input">
+        <span aria-hidden="true">🔎</span>
+        <input id="searchInput" type="search" placeholder="Buscar cancha o barrio…" autocomplete="off" />
+      </div>
+    </div>
+    <nav class="filters" id="filters">
+      <button class="chip active" data-filter="all">✨ Todas</button>
+      <button class="chip" data-filter="futsal">🥅 Futsal</button>
+      <button class="chip" data-filter="sintetica">🌿 Sintética</button>
+      <button class="chip" data-filter="techada">🏟️ Techadas</button>
+      <button class="chip" data-filter="abierta">🟢 Abiertas ahora</button>
+    </nav>
+
+    <!-- ---------- VISTA MAPA ---------- -->
+    <section class="view" id="mapView">
+      <div id="map" class="map"></div>
+      <div class="map-count" id="mapCount">Cargando canchas…</div>
+      <!-- Tarjeta emergente al tocar un marcador -->
+      <div class="map-card hidden" id="mapCard"></div>
+    </section>
+
+    <!-- ---------- VISTA LISTA ---------- -->
+    <section class="view hidden" id="listView">
+      <div class="list-head">
+        <span id="listCount">0 canchas</span>
+        <button class="sort-btn" id="sortBtn">Ordenar: Cercanía ▾</button>
+      </div>
+      <div class="cards" id="cardList" aria-live="polite"></div>
+    </section>
+
+    <!-- ---------- VISTA MIS RESERVAS ---------- -->
+    <section class="view hidden" id="bookingsView">
+      <h2 class="view-title">📋 Mis reservas</h2>
+      <div class="bookings" id="bookingList" aria-live="polite"></div>
+    </section>
+
+    <!-- Barra de navegación inferior -->
+    <nav class="tabbar">
+      <button class="tab active" data-view="map">🗺️<span>Mapa</span></button>
+      <button class="tab" data-view="list">📃<span>Lista</span></button>
+      <button class="tab" data-view="bookings">📋<span>Reservas</span></button>
+    </nav>
+  </main>
+
+  <!-- ======================= HOJA DE DETALLE DE CANCHA ======================= -->
+  <div class="sheet-overlay hidden" id="detailSheet">
+    <div class="sheet" id="detailSheetInner">
+      <button class="sheet-close" id="closeDetail" aria-label="Cerrar">✕</button>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <!-- ======================= MODAL DE RESERVA / PAGO ======================= -->
+  <div class="modal-overlay hidden" id="bookModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="bookModalTitle">Reservar</h2>
+        <button class="icon-btn" id="closeBookModal" aria-label="Cerrar">✕</button>
+      </div>
+      <div id="bookModalBody"></div>
+    </div>
+  </div>
+
+  <!-- ======================= MODAL: AJUSTES ======================= -->
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Ajustes</h2>
+        <button class="icon-btn" id="closeSettingsModal" aria-label="Cerrar">✕</button>
+      </div>
+      <label class="field">
+        <span>Tu nombre</span>
+        <input id="settingsNameInput" type="text" maxlength="24" autocomplete="name" />
+      </label>
+      <label class="field">
+        <span>Tu WhatsApp</span>
+        <input id="settingsPhoneInput" type="tel" maxlength="15" inputmode="numeric" autocomplete="tel" />
+      </label>
+      <button id="saveSettingsBtn" class="btn btn-primary btn-lg">Guardar</button>
+      <button id="resetBtn" class="btn btn-ghost">Borrar mis datos y reservas</button>
+      <p class="settings-credit">CanchApp Arauca · demo · tus datos se guardan en este dispositivo.</p>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
