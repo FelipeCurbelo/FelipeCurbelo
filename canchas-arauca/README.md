@@ -1,25 +1,31 @@
-# CanchApp Arauca ⚽
+# Kancha ⚽ · Canchas de Arauca
 
-Un "Google Maps de canchas deportivas" para **Arauca, Arauca (Colombia)**.
-Encuentra todas las canchas de **futsal** y **sintética** de la ciudad en un
-mapa, consulta qué horarios están libres, reserva tu hora y paga — todo desde
-el celular.
+App para encontrar, reservar y pagar canchas de **futsal** y **sintética** en
+**Arauca, Arauca (Colombia)**. Un mapa con todas las canchas de la ciudad,
+disponibilidad por horario, reserva en segundos y pago simulado con
+confirmación por WhatsApp.
 
-Es una **PWA** (aplicación web instalable) hecha con HTML, CSS y JavaScript
-puro. No necesita servidor: funciona en GitHub Pages y puede instalarse en el
+Es una **PWA** (aplicación web instalable) en HTML, CSS y JavaScript puro, sin
+backend ni dependencias de CDN: funciona en GitHub Pages y se instala en el
 teléfono como una app.
 
-## ✨ Qué hace
+Esta versión implementa el prototipo de diseño **“Kancha”** (marca oscura con
+acento lima, tipografías Space Grotesk / Space Mono / Instrument Serif e iconos
+Material Symbols), portado de React a JavaScript puro.
 
-- 🗺️ **Mapa interactivo** con todas las canchas (Leaflet + OpenStreetMap, sin API key).
-- 🔎 **Búsqueda y filtros**: por tipo (futsal/sintética), techadas o abiertas ahora, y por barrio.
-- 🕒 **Disponibilidad por horario**: elige el día (próximos 7 días) y mira qué franjas de 1 hora están libres, reservadas o ya pasaron.
-- ✅ **Reservas** en segundos, guardadas en tu dispositivo.
-- 💳 **Pago**: efectivo en la cancha, Nequi/Daviplata o tarjeta/PSE (flujo listo, ver nota abajo).
-- 💬 **Confirmación por WhatsApp** con el dueño de la cancha, con el mensaje ya redactado.
-- 📋 **Mis reservas**: próximas y anteriores, con opción de cancelar.
-- 📍 **Ubicación**: ordena las canchas por cercanía si compartes tu GPS.
-- 📱 **Instalable y offline**: service worker + manifest.
+## ✨ Pantallas y funciones
+
+- **Onboarding** en dos pasos (portada + perfil: nombre y WhatsApp).
+- **Mapa** a pantalla completa (Leaflet + tiles oscuros de CARTO) con
+  marcadores de precio y un carrusel inferior de tarjetas sincronizado con el mapa.
+- **Búsqueda** por cancha/barrio y **filtros** (todas, sintética, futsal, techadas).
+- **Lista** “Cerca de ti” con turnos rápidos del día.
+- **Detalle** de cancha: fotos, calificación, servicios, selector de día (7 días),
+  duración (1 o 2 horas) y grilla de horarios (libre / ocupado).
+- **Pago** simulado con métodos (Nequi, Daviplata, efectivo) y resumen.
+- **Confirmación** con código de reserva (`KAN-XXXX`) y botón de WhatsApp.
+- **Mis reservas**: próximas e historial, con cancelación.
+- **PWA**: instalable y offline (manifest + service worker).
 
 ## 🚀 Cómo probarla
 
@@ -37,15 +43,21 @@ O publícala en **GitHub Pages** (Settings → Pages → carpeta `/canchas-arauc
 
 ```
 canchas-arauca/
-├── index.html          Interfaz (onboarding, mapa, lista, reservas)
-├── styles.css          Estilos (tema oscuro deportivo, mobile-first)
-├── app.js              Lógica: mapa, filtros, disponibilidad, reservas, pago
+├── index.html          Estructura y montaje de la app
+├── styles.css          Sistema de diseño (tema oscuro, acento lima)
+├── app.js              Lógica: mapa, filtros, disponibilidad, reserva, pago
 ├── data.js             Catálogo de canchas (EDITA ESTO con tus canchas reales)
 ├── manifest.webmanifest
 ├── sw.js               Service worker (offline)
-├── vendor/leaflet/     Leaflet vendorizado (sin depender de un CDN)
+├── vendor/
+│   ├── leaflet/        Leaflet vendorizado (sin CDN)
+│   └── fonts/          Space Grotesk / Mono, Instrument Serif y Material
+│                       Symbols (subconjunto de ~25 KB), vendorizados
 └── icons/              Iconos de la app (+ generador gen_icons.py)
 ```
+
+Todo se sirve desde el mismo origen: **no hay llamadas a CDN** (fuentes, iconos
+y mapa base van vendorizados; solo los *tiles* del mapa se piden a CARTO).
 
 ## ✏️ Poner tus canchas reales
 
@@ -73,29 +85,29 @@ Edita `data.js`. Cada cancha tiene:
 > Los datos actuales son **de ejemplo** (coordenadas aproximadas dentro de
 > Arauca). Reemplázalos por las canchas reales y sus números de contacto.
 
+## ⏱️ Disponibilidad y reservas
+
+- La disponibilidad se genera de forma determinista (algunas franjas aparecen
+  “ocupadas”) más las reservas que haces tú, que se guardan en el dispositivo
+  (`localStorage`: `kancha_user_v1`, `kancha_bookings_v1`).
+- Las franjas ya pasadas del día de hoy se deshabilitan automáticamente.
+
 ## 💰 Sobre los pagos
 
-GitHub Pages no tiene backend, así que la app **no cobra dinero real**: registra
-la reserva en el dispositivo y la confirma por WhatsApp con la cancha. El flujo
-de pago (efectivo / Nequi / PSE) ya está construido en la interfaz.
+GitHub Pages no tiene backend, así que la app **no cobra dinero real**: el pago
+es un flujo simulado y la reserva se confirma por WhatsApp con la cancha. Para
+cobrar de verdad hace falta un backend y una pasarela colombiana (Wompi,
+Mercado Pago, ePayco/PayU) que soporte PSE, Nequi y tarjetas. El siguiente paso
+sería, además, un backend que comparta canchas y reservas entre todos los
+usuarios (hoy cada reserva vive solo en el teléfono de quien reserva).
 
-Para cobrar de verdad necesitas un pequeño backend y una pasarela colombiana.
-Rutas recomendadas:
+## 🛠️ Regenerar recursos
 
-- **Wompi** (Bancolombia) o **Mercado Pago**: soportan PSE, Nequi y tarjetas.
-- **ePayco** o **PayU**: alternativas con PSE.
-
-El siguiente paso sería:
-1. Un backend (Node/Firebase/Supabase) que guarde canchas, horarios y reservas de forma compartida entre todos los usuarios (hoy cada reserva vive solo en el teléfono de quien reserva).
-2. Crear la transacción con la pasarela y confirmar la reserva con el *webhook* de pago.
-3. Panel para que cada dueño de cancha administre sus horarios.
-
-## 🛠️ Tecnología
-
-- HTML + CSS + JavaScript (vanilla), sin frameworks.
-- [Leaflet](https://leafletjs.com/) 1.9.4 (vendorizado) sobre tiles de OpenStreetMap.
-- `localStorage` para datos del usuario y reservas.
-- PWA: `manifest.webmanifest` + service worker.
+- **Iconos de la app**: `python3 icons/gen_icons.py`.
+- **Fuentes**: se vendorizaron desde npm (`material-symbols`,
+  `@fontsource-variable/space-grotesk`, `@fontsource/space-mono`,
+  `@fontsource/instrument-serif`); Material Symbols se subconjuntó con
+  `pyftsubset` a los ~25 iconos usados.
 
 ---
 

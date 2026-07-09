@@ -1,5 +1,5 @@
-/* Service Worker de CanchApp Arauca — funciona sin conexión. */
-const CACHE = "canchapp-arauca-v1";
+/* Service Worker de Kancha — funciona sin conexión (menos los tiles del mapa). */
+const CACHE = "kancha-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -11,8 +11,13 @@ const ASSETS = [
   "./icons/icon-512.png",
   "./vendor/leaflet/leaflet.css",
   "./vendor/leaflet/leaflet.js",
-  "./vendor/leaflet/images/marker-icon.png",
-  "./vendor/leaflet/images/marker-shadow.png",
+  "./vendor/fonts/fonts.css",
+  "./vendor/fonts/material-symbols-subset.woff2",
+  "./vendor/fonts/space-grotesk-variable.woff2",
+  "./vendor/fonts/space-mono-400.woff2",
+  "./vendor/fonts/space-mono-700.woff2",
+  "./vendor/fonts/instrument-serif-400.woff2",
+  "./vendor/fonts/instrument-serif-400-italic.woff2",
 ];
 
 self.addEventListener("install", (e) => {
@@ -34,8 +39,8 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-  // Los tiles del mapa se van a la red (no se cachean para no llenar el disco).
-  if (url.hostname.includes("tile.openstreetmap.org")) return;
+  // Los tiles del mapa van siempre a la red (no se cachean).
+  if (url.hostname.includes("cartocdn.com") || url.hostname.includes("tile.openstreetmap.org")) return;
   e.respondWith(
     caches.match(e.request).then((cached) =>
       cached ||

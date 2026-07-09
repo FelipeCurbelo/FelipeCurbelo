@@ -1,13 +1,13 @@
 {
-  "name": "CanchApp Arauca",
-  "short_name": "CanchApp",
-  "description": "Encuentra canchas de futsal y sintética en Arauca, consulta disponibilidad, reserva y paga.",
+  "name": "Kancha · Canchas de Arauca",
+  "short_name": "Kancha",
+  "description": "Encuentra, reserva y paga las mejores canchas sintéticas y de futsal de Arauca.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0d1512",
-  "theme_color": "#0b6e4f",
+  "background_color": "#0A0D0B",
+  "theme_color": "#0C1310",
   "lang": "es",
   "categories": ["sports", "lifestyle", "maps"],
   "icons": [

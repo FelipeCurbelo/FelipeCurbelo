@@ -1,58 +1,58 @@
 #!/usr/bin/env python3
-"""Genera los iconos PNG de CanchApp Arauca sin dependencias externas.
-Dibuja un balón de fútbol sobre un campo verde con líneas de cancha.
+"""Genera los iconos PNG de Kancha sin dependencias externas.
+Dibuja la marca: contorno de cancha + línea de medio campo + círculo central,
+en verde lima (#C8F04E) sobre fondo oscuro (#0A0D0B).
 """
 import struct, zlib, math
 
-def lerp(a, b, t):
-    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+ACC = (200, 240, 78)   # #C8F04E
+BG = (10, 13, 11)      # #0A0D0B
 
 def draw(size):
-    top = (18, 184, 134)     # verde claro
-    bot = (6, 48, 31)        # verde oscuro
-    line = (210, 245, 230)   # líneas de cancha
-    ball = (245, 250, 248)   # balón blanco
-    spot = (20, 30, 26)      # pentágonos
     px = bytearray()
     cx = cy = size / 2
     r_corner = size * 0.22
-    br = size * 0.24          # radio del balón
+    sw = max(2, size * 0.028)         # grosor de línea
+    # rectángulo de la cancha
+    rx, ry = size * 0.30, size * 0.20
+    x0, x1 = cx - rx, cx + rx
+    y0, y1 = cy - ry, cy + ry
+    field_r = size * 0.045            # esquinas del campo
+    ring = size * 0.115               # círculo central
+    dot = size * 0.028                # punto central
+
+    def on_rrect(x, y):
+        # ¿está sobre el borde del rectángulo redondeado del campo?
+        if x < x0 - sw or x > x1 + sw or y < y0 - sw or y > y1 + sw:
+            return False
+        inside = (x0 - sw <= x <= x1 + sw) and (y0 - sw <= y <= y1 + sw)
+        outside = (x0 + sw <= x <= x1 - sw) and (y0 + sw <= y <= y1 - sw)
+        return inside and not outside
+
     for y in range(size):
-        row = bytearray([0])  # filtro none
-        t = y / size
-        bg = lerp(top, bot, t)
+        row = bytearray([0])
         for x in range(size):
-            col = bg
+            col = BG
             a = 255
-            # esquinas redondeadas -> transparente
+            # esquinas redondeadas del icono -> transparente
             if (x < r_corner or x > size - r_corner) and (y < r_corner or y > size - r_corner):
                 ex = r_corner if x < r_corner else size - r_corner
                 ey = r_corner if y < r_corner else size - r_corner
                 if math.hypot(x - ex, y - ey) > r_corner:
                     a = 0
+            # borde de la cancha (rect redondeado aproximado)
+            if on_rrect(x, y):
+                col = ACC
             # línea de medio campo
-            if abs(y - cy) < size * 0.012:
-                col = line
-            # círculo central de la cancha
-            dc = math.hypot(x - cx, y - cy)
-            if abs(dc - size * 0.30) < size * 0.012:
-                col = line
-            # balón central
-            if dc < br:
-                col = ball
-                # pentágono central
-                if dc < br * 0.34:
-                    col = spot
-                # 5 pentágonos alrededor
-                for k in range(5):
-                    ang = math.radians(-90 + k * 72)
-                    sx = cx + math.cos(ang) * br * 0.66
-                    sy = cy + math.sin(ang) * br * 0.66
-                    if math.hypot(x - sx, y - sy) < br * 0.20:
-                        col = spot
-                # borde del balón
-                if dc > br - size * 0.012:
-                    col = spot
+            if abs(x - cx) < sw / 2 and y0 <= y <= y1:
+                col = ACC
+            # círculo central
+            d = math.hypot(x - cx, y - cy)
+            if abs(d - ring) < sw / 2:
+                col = ACC
+            # punto central
+            if d < dot:
+                col = ACC
             row += bytes((col[0], col[1], col[2], a))
         px += row
     raw = bytes(px)
